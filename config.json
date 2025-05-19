@@ -66,6 +66,12 @@
     "links": {
         "project": [
             {
+                "name": "OnCore Field Mappings",
+                "icon": "fas fa-right-left",
+                "url": "pages/FieldMappings.php",
+                "show-header-and-footer": true
+            },
+            {
                 "name": "OnCore Sync Dashboard",
                 "icon": "fas fa-arrows-rotate",
                 "url": "pages/SyncDashboard.php",
@@ -74,6 +80,7 @@
         ]
     },
     "no-auth-pages": [
+        "field-mapping",
         "sync-dashboard"
     ]
 }

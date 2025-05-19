@@ -35,7 +35,10 @@ $instruments = REDCap::getInstrumentNames();
             `
                 <tr>
                     <th rowspan='1' colspan="1" class='sorting_disabled'>
-                        ${value}
+                        ${value} Fields
+                    </th>
+                    <th rowspan='1' colspan="1" class='sorting_disabled'>
+                        OnCore Field
                     </th>
                 </tr>
             `;
