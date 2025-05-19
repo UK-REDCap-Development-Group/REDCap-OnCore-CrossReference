@@ -22,6 +22,7 @@ $instruments = REDCap::getInstrumentNames();
     const inst_list = document.getElementById('instruments_list');
 
     console.log(dictionary);
+
     // Loop through key value pairs for display on frontend
     Object.entries(instruments).forEach(([key, value]) => {
         let table = document.createElement('table');
@@ -47,13 +48,14 @@ $instruments = REDCap::getInstrumentNames();
         let tbody = document.createElement('tbody');
         table.appendChild(tbody);
 
-        let i = 0;
+        // Loop through the fields for each instrument
+        let i = 1;
         Object.entries(dictionary[key]).forEach(([key2, value2]) => {
             let row = document.createElement('tr');
             if ( i % 2 !== 0) {
                 row.classList = 'odd';
             } else {
-              row.classList = 'even';
+                row.classList = 'even';
             }
 
             row.innerHTML =
