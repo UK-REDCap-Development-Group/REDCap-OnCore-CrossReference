@@ -58,12 +58,18 @@ $instruments = REDCap::getInstrumentNames();
                 row.classList = 'even';
             }
 
+            // This will need another loop to pull all the available choices, or alternatively, we may need to figure
+            // out another way of doing things depending on how big we expect the data to be. There were not that many
+            // fields in what I was given, but that could change.
+
+            // Excel has these broken down by section, can we have them organized that way in extraction? We could potentially map fields automatically?
             row.innerHTML =
                 `<td style='width: 50% !important;'>
                     <label for='${key2}'>${key2}</label>
                  </td>
                  <td style='width: 50% !important;'>
                      <select name='${key2}' id='${key2}'>
+                        <option name="none">None</option>
                      </select>
                  </td>`;
 
