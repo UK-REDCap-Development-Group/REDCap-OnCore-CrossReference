@@ -8,7 +8,6 @@ use REDCap;
 
 class ROCS extends AbstractExternalModule
 {
-
     // provided courtesy of Scott J. Pearson
     private static function isExternalModulePage()
     {
@@ -66,6 +65,9 @@ class ROCS extends AbstractExternalModule
 
     // Checks for which form we are on and includes instructions for mapping data to fiels on that page
     function redcap_every_page_top($project_id) {
+        // Get the OnCore API base from the project settings
+        $oncore_url = $this->getProjectSetting('oncore-base-url');
+
         if (self::isFieldMappingPage()) {
             $project_id = $_GET['pid']; // or however you're getting the project ID
             $instruments = REDCap::getInstrumentNames(); // Get instrument names

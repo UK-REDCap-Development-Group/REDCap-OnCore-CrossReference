@@ -13,54 +13,14 @@
     "system-settings": [],
     "project-settings": [
         {
-            "key": "rocs",
-            "name": "ROCS",
-            "required": false,
-            "type": "sub_settings",
-            "repeatable": false,
-            "sub_settings": [
-                {
-                    "key": "classify-email",
-                    "name": "CLASSify Email",
-                    "required": true,
-                    "type": "text",
-                    "repeatable": false
-                },
-                {
-                    "key": "check-account-status",
-                    "name": "<button id='account-status' onclick='checkEmail()'>Check CLASSify Account Status</button><p id='response'></p>",
-                    "type": "descriptive"
-                },
-                {
-                    "key": "collaboration-request",
-                    "name": "If you would like to use the CLASSify Connect plugin but do not have CLASSify access, you may fill out the <a href='https://redcap.uky.edu/redcap/surveys/?s=K7WTCDH37AXLEKNM' target='_blank'>Center for Applied AI Collaboration Request</a> form for review by our team. ",
-                    "type": "descriptive"
-                },
-                {
-					"key": "form-id",
-					"name": "Form Selection",
-					"required": true,
-					"type": "form-list",
-					"repeatable": false
-				},
-                {
-                    "key": "class-field",
-                    "name": "Select a field to use as a classifier.",
-                    "required": true,
-                    "type": "field-list",
-                    "repeatable": false
-                },
-                {
-                    "key": "save-request",
-                    "name": "Make sure that you save your settings before uploading to CLASSify or they will not be reflected in the request.",
-                    "type": "descriptive"
-                },
-                {
-                    "key": "upload-dataset",
-                    "name": "<button id='upload-button' onclick='handleUpload()'>Upload Form Data to CLASSify</button>",
-                    "type": "descriptive"
-                }
-            ]
+            "key": "base-url-desc",
+            "name": "Please input the base url for the OnCore API source you wish to use below. The URL should follow the this format:<br> https://oncore.forteresearchapps.com/.",
+            "type": "descriptive"
+        },
+        {
+            "key": "oncore-base-url",
+            "name": "OnCore API Base URL",
+            "type": "text"
         }
     ],
     "links": {
