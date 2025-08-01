@@ -18,8 +18,18 @@
             "type": "descriptive"
         },
         {
-            "key": "oncore-base-url",
+            "key": "oncore-api-url",
             "name": "OnCore API Base URL",
+            "type": "text"
+        },
+        {
+            "key": "oncore-secret",
+            "name": "OnCore Secret",
+            "type": "text"
+        },
+        {
+            "key": "oncore-clientID",
+            "name": "OnCore Client ID",
             "type": "text"
         }
     ],
