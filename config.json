@@ -18,6 +18,11 @@
             "type": "descriptive"
         },
         {
+            "key": "oncore-token-url",
+            "name": "OnCore API Token URL",
+            "type": "text"
+        },
+        {
             "key": "oncore-api-url",
             "name": "OnCore API Base URL",
             "type": "text"
@@ -28,7 +33,7 @@
             "type": "text"
         },
         {
-            "key": "oncore-clientID",
+            "key": "oncore-client",
             "name": "OnCore Client ID",
             "type": "text"
         }

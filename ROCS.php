@@ -8,6 +8,28 @@ use REDCap;
 
 class ROCS extends AbstractExternalModule
 {
+    // Functional proxy to hit from frontend to communicate with external APIs. Used in proxy.php
+    // This version is assuming data is included as a json (not using JSON.stringify).
+    // Ensure requests to proxyPost will have the csrf token included in the json.
+    public function proxyPost($apiPath)
+    {
+        $apiUrl = rtrim($this->getSystemSetting('oncore_api_url') ?: '', '/') . $apiPath;
+        $body = file_get_contents('php://input');
+
+        $ch = curl_init($apiUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+
+        $response = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        http_response_code($status);
+        echo $response;
+    }
+
     // provided courtesy of Scott J. Pearson
     private static function isExternalModulePage()
     {
