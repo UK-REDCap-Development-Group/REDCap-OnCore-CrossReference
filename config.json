@@ -51,11 +51,24 @@
                 "icon": "fas fa-arrows-rotate",
                 "url": "pages/SyncDashboard.php",
                 "show-header-and-footer": true
+            },
+            {
+                "name": "API Test Page",
+                "icon": "fas fa-paper-plane",
+                "url": "pages/TestPage.php",
+                "show-header-and-footer": true
             }
         ]
     },
+    "api-actions": {
+        "example-action": {
+            "description": "This is an example of an action. auth below requires the endpoint to recieve a CRS token",
+            "access": ["auth"]
+        }
+    },
     "no-auth-pages": [
         "field-mapping",
-        "sync-dashboard"
+        "sync-dashboard",
+        "test-page"
     ]
 }

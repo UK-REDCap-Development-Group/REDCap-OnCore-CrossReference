@@ -16,11 +16,17 @@ if (!defined('PAGE')) define('PAGE', 'ajax');
 header('Content-Type: application/json');
 
 $action = $_GET['action'] ?? '';
+$parameters = $_GET['parameters'] ?? ''; // parameters are added as a list so that we can genericize the action request
 
 try {
     switch ($action) {
         case 'example':
             $response = $module->proxyPost('/example/endpoint');
+            echo $response;
+            break;
+
+        case 'protocols':
+            $response = $module->proxyPost("/protocols?$parameters[0]");
             echo $response;
             break;
 
