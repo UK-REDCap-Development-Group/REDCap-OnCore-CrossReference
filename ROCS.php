@@ -6,6 +6,9 @@ use ExternalModules\AbstractExternalModule;
 use ExternalModules\ExternalModules;
 use REDCap;
 
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\RequestException;
+
 class ROCS extends AbstractExternalModule
 {
     // Functional proxy to hit from frontend to communicate with external APIs. Used in proxy.php
@@ -13,21 +16,59 @@ class ROCS extends AbstractExternalModule
     // Ensure requests to proxyPost will have the csrf token included in the json.
     public function proxyPost($apiPath)
     {
-        $apiUrl = rtrim($this->getSystemSetting('oncore_api_url') ?: '', '/') . $apiPath;
-        $body = file_get_contents('php://input');
+        $client = new Client();
+        $tokenUrl = trim($this->getProjectSetting('oncore-token-url') ?: '');
+        $baseUrl = trim($this->getProjectSetting('oncore-api-url') ?: '');
 
-        $ch = curl_init($apiUrl);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        if (empty($tokenUrl)) {
+            throw new \Exception("Token URL is not configured.");
+        }
 
-        $response = curl_exec($ch);
-        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if (empty($baseUrl)) {
+            throw new \Exception("API URL is not configured.");
+        }
 
-        http_response_code($status);
-        echo $response;
+        $apiUrl = rtrim($baseUrl, '/') . '/' . ltrim($apiPath, '/');
+
+        // Get OAuth credentials from your settings or config
+        $clientId = $this->getProjectSetting('oncore-client');
+        $clientSecret = $this->getProjectSetting('oncore-secret');
+
+        try {
+            $token_response = $client->post($tokenUrl, [
+                    'headers' => [
+                        'Content-Type' => 'application/x-www-form-urlencoded',
+                    ],
+                    'form_params' => [
+                        "client_id" => $clientId,
+                        "client_secret" => $clientSecret,
+                        "grant_type" => "client_credentials"
+                    ],
+                    'http_errors' => false, // avoid exceptions on 4xx/5xx
+                    'verify' => true,       // set to false only if SSL issues
+            ]);
+
+            $token_data = json_decode($token_response->getBody()->getContents(), true);
+            $access_token = $token_data['access_token'] ?? null;
+
+            error_log('Token Response: ' . $token_response->getBody()->getContents());
+
+            $response = $client->get($apiUrl, [
+                    'headers' => [
+                        'Authorization' => "Bearer $access_token"
+                    ],
+            ]);
+
+            http_response_code($response->getStatusCode());
+            echo $response->getBody()->getContents();
+
+        } catch (RequestException $e) {
+            http_response_code(500);
+            echo json_encode([
+                'error' => 'Request failed',
+                'message' => $e->getMessage(),
+            ]);
+        }
     }
 
     // provided courtesy of Scott J. Pearson

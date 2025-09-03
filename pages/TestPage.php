@@ -4,7 +4,7 @@ $page = "test-page";
 ?>
 
 <div>
-    <button id="testAPI" onclick=checkProtocolsAPI('14999')>Test API Connection</button>
+    <button id="testAPI" onclick=checkProtocolsAPI('IMID-22-BNT162-21')>Test API Connection</button>
     <div id="apiOutput">
 
     </div>
@@ -12,7 +12,7 @@ $page = "test-page";
 
 <script>
     function checkProtocolsAPI(protocol_id) {
-        const url = `<?= $module->getUrl("proxy.php") ?>&action=protocols&parameters[]=${protocol_id}`
+        const url = `<?= $module->getUrl("proxy.php") ?>&action=protocols&protocolNo=${protocol_id}`
 
         let response = fetch(url)
             .then(data => {

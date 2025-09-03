@@ -15,18 +15,24 @@ if (!defined('PAGE')) define('PAGE', 'ajax');
 
 header('Content-Type: application/json');
 
-$action = $_GET['action'] ?? '';
-$parameters = $_GET['parameters'] ?? ''; // parameters are added as a list so that we can genericize the action request
+$action = $_GET['action'] ?? ''; // get only the action parameter
+
+$params = $_GET; // get every parameter from the url
+
+// remove REDCap specific components
+unset($params['action']);
+unset($params['prefix']);
+unset($params['page']);
+unset($params['pid']);
+unset($params['pnid']);
+unset($params['instance']);
+
+$queryString = http_build_query($params); // rebuild parameters into something we can append to a URL below
 
 try {
     switch ($action) {
-        case 'example':
-            $response = $module->proxyPost('/example/endpoint');
-            echo $response;
-            break;
-
         case 'protocols':
-            $response = $module->proxyPost("/protocols?$parameters[0]");
+            $response = $module->proxyPost("/protocols?$queryString");
             echo $response;
             break;
 

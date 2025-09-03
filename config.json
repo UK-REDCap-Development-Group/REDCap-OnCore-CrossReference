@@ -13,8 +13,8 @@
     "system-settings": [],
     "project-settings": [
         {
-            "key": "base-url-desc",
-            "name": "Please input the base url for the OnCore API source you wish to use below. The URL should follow the this format:<br> https://oncore.forteresearchapps.com/.",
+            "key": "token-url-desc",
+            "name": "Please input the url for the OnCore OAuth Token API source you wish to use below. The URL should look something like this:<br> https://oncore.forteresearchapps.com/forte-platform-web/api/oauth/token.",
             "type": "descriptive"
         },
         {
@@ -23,9 +23,19 @@
             "type": "text"
         },
         {
+            "key": "base-url-desc",
+            "name": "Please input the base url for the OnCore API source you wish to use below. The URL should look something like this:<br> https://oncore.forteresearchapps.com/oncore-api/rest/.",
+            "type": "descriptive"
+        },
+        {
             "key": "oncore-api-url",
             "name": "OnCore API Base URL",
             "type": "text"
+        },
+        {
+            "key": "secret-client-desc",
+            "name": "Below you should include the client secret and client id which was generated for your API connection.",
+            "type": "descriptive"
         },
         {
             "key": "oncore-secret",
