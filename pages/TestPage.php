@@ -14,9 +14,21 @@ $page = "test-page";
     function checkProtocolsAPI(protocol_id) {
         const url = `<?= $module->getUrl("proxy.php") ?>&action=protocols&protocolNo=${protocol_id}`
 
-        let response = fetch(url)
+        fetch(url)
+            .then(response => response.json())
             .then(data => {
-                console.log(data);
+                let output_div = document.getElementById('apiOutput');
+                output_div.innerHTML = `<pre style="
+                background:#f4f4f4;
+                padding:10px;
+                border-radius:6px;
+                font-family:monospace;
+                white-space:pre-wrap;
+                word-break:break-word;
+            ">${JSON.stringify(data, null, 2)}</pre>`;
             })
+            .catch(error => {
+                console.error('Error fetching protocols:', error);
+            });
     }
 </script>
