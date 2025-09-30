@@ -181,15 +181,14 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             data: {
                 redcap_csrf_token: ExternalModules.CSRF_TOKEN,
                 mappings: mapping
+            },
+            success: function (result) {
+                alert("Mappings saved: " + result.message);
+            },
+            error: function (xhr, status, error) {
+                console.error("Error saving mappings:", error);
             }
         })
-        .then(response => response.json())
-        .then(result => {
-            alert("Mappings saved: " + result.message);
-        })
-        .catch(error => {
-            console.error("Error saving mappings:", error);
-        });
     }
 </script>
 
