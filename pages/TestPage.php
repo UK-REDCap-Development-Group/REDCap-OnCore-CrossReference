@@ -4,7 +4,8 @@ $page = "test-page";
 ?>
 
 <div>
-    <button id="testAPI" onclick=checkProtocolsAPI('IMID-22-BNT162-21')>Test API Connection</button>
+<!--    <button id="testAPI" onclick=checkProtocolsAPI('IMID-22-BNT162-21')>Test API Connection</button>-->
+    <button id="testAPI" onclick=checkProtocolsAPI('01-BMT-131')>Test API Connection</button>
     <div id="apiOutput">
 
     </div>

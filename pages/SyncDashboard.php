@@ -1,15 +1,12 @@
 <?php
+/** @var \ExternalModules\AbstractExternalModule $module */
 $page = "field-mapping";
 $instruments = REDCap::getInstrumentNames();
 ?>
 
+<script type="text/javascript" src="<?= $module->getUrl("js/requests.js") ?>"></script>
+
 <div class="d-flex container" style="flex-direction: column;">
-    <!--<div class="col" style="max-width:50% !important;">
-        <h1>REDCap</h1>
-    </div>
-    <div class="col" style="max-width:50% !important;">
-        <h1>OnCore</h1>
-    </div>-->
     <div id="instruments_list" class="row" style="flex-direction: column;">
 
     </div>
