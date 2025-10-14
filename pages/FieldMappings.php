@@ -3,10 +3,14 @@
 $page = "field-mapping";
 $instruments = REDCap::getInstrumentNames();
 $csrf = $module->getCSRFToken();
+
+// Will use this value later for batching requests if max_input is hit
 $maxInputVars = ini_get('max_input_vars') ?: 1000;
 ?>
 <script>
+    // Get max_input from php.ini into a js workable variable
     const MAX_INPUT_VARS = <?= (int)$maxInputVars ?>;
+    const displayed = []; // tracks displayed instruments
 </script>
 
 <style>
@@ -89,6 +93,46 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 .close-button {
     background-color: #dc3545;
     color: white;
+}
+
+.center-home-sects span {
+    font-size: 5vw;
+    color: #606060;
+    -webkit-transition: background-color 100ms linear;
+    -ms-transition: background-color 100ms linear;
+    transition: background-color 100ms linear;
+}
+
+.selection-btns {
+    margin: 0 10% 0 10%;
+}
+
+.selection-btns a {
+    text-decoration: none;
+}
+
+.center-home-sects {
+    text-align:center;
+    border-radius: 5%;
+    padding: 5% 0 5% 0;
+    margin:0;
+    color: #606060;
+    -webkit-transition: background-color 100ms linear;
+    -ms-transition: background-color 100ms linear;
+    transition: background-color 100ms linear;
+}
+
+.center-home-sects:hover {
+    color: #fff;
+    background-color: #606060;
+}
+
+.center-home-sects:hover span{
+    color: #fff;
+}
+
+.hide {
+    display: none;
 }
 </style>
 
@@ -180,7 +224,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             method: "POST",
             data: {
                 redcap_csrf_token: ExternalModules.CSRF_TOKEN,
-                mappings: mapping
+                mappings: JSON.stringify(mapping),
             },
             success: function (result) {
                 alert("Mappings saved: " + result.message);
@@ -193,20 +237,57 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 </script>
 
 <div class="d-flex container" style="flex-direction: column;">
+    <!-- Add and remove form section -->
+    <div class="row selection-btns">
+        <div class="col-md-6">
+            <a id="add-form-btn">
+                <div class="center-home-sects">
+                    <span><i class="fa fa-plus"></i></span><br>
+                    <h5>Add Form</h5>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-6">
+            <a id="remove-form-btn" class="center-home-sects">
+                <div class="center-home-sects">
+                    <span><i class="fas fa-x"></i></span><br>
+                    <h5>Remove Form</h5>
+                </div>
+            </a>
+        </div>
+    </div>
+    
+    <!-- List of forms and their fields -->
     <div id="instruments_list" class="row" style="flex-direction: column;">
 
     </div>
-    <div class="row" style="padding-top: 10pt;">
-        <button onClick="saveMappings()">Save Mappings</button>
-        <button id="compareBtn">Sync with OnCore</button>
+
+    <!-- Save and sync buttons -->
+    <div class="row selection-btns">
+        <div class="col-md-6">
+            <a id="save-map-btn">
+                <div class="center-home-sects">
+                    <span><i class="fa fa-floppy-disk"></i></span><br>
+                    <h5>Save Mappings</h5>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-6">
+            <a id="sync-btn" class="center-home-sects">
+                <div class="center-home-sects">
+                    <span><i class="fas fa-arrows-rotate"></i></span><br>
+                    <h5>Sync with OnCore</h5>
+                </div>
+            </a>
+        </div>
     </div>
 </div>
 
 <script>
-        function modalTest(recordA, recordB, onSelectCallback) {
-        // Prevent creating multiple modals
-        if (document.getElementById('comparison-modal')) {
-            return;
+    /* Create the basic modal structure */
+    function buildModal() {
+        if (document.getElementById('modal-overlay')) {
+            return; // Modal already exists
         }
 
         // --- 1. Create Modal Elements ---
@@ -216,6 +297,17 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
         const modalBox = document.createElement('div');
         modalBox.className = 'modal-box';
+
+        console.log(modalOverlay, modalBox)
+
+        return { modalOverlay, modalBox };
+    }
+
+    function modalTest(recordA, recordB, onSelectCallback) {
+        const built = buildModal();
+        if (!built) return; // The modal already exists
+
+        const { modalOverlay, modalBox } = built;
 
         let modalContent = `
             <h2>Record Comparison</h2>
@@ -278,6 +370,53 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
+    // Populate the modal with a form selection window
+    function addForm(instruments, displayed) {
+        const built = buildModal();
+        if (!built) return; // The modal already exists
+
+        const { modalOverlay, modalBox } = built;
+
+        let modalContent = `
+            <h2>Select a Form to Add</h2>
+            <p>Please choose from the available REDCap forms below.</p>
+            <div class="modal-form-selection-grid">
+                <select id="form-select">`;
+        
+        modalContent += `
+                </select>
+            </div> 
+            <div class="modal-actions">
+                <button id="close_btn" class="close-button">Cancel</button>
+            </div>
+        `;
+
+        modalBox.innerHTML = modalContent;
+        modalOverlay.appendChild(modalBox);
+        document.body.appendChild(modalOverlay);
+
+        Object.entries(instruments).forEach(([key, value]) => {
+            if (displayed.includes(key)) return; // Skip already displayed forms
+            const option = document.createElement("option");
+            option.value = key;
+            option.textContent = value;
+            modalBox.querySelector('#form-select').appendChild(option);
+        });
+        
+        // Close listener
+        const closeModal = () => {
+            document.body.removeChild(modalOverlay);
+        };
+        
+        // Close modal on 'Cancel' or by clicking the background
+        document.getElementById('close_btn').addEventListener('click', closeModal);
+        modalOverlay.addEventListener('click', (event) => {
+            if (event.target === modalOverlay) {
+                closeModal();
+            }
+        });
+    }
+
     const redcap_record = {
         'record_id': 101,
         'eirb': '10001',
@@ -302,8 +441,12 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         alert(`You chose the record with id: ${selectedRecord.record_id}`);
     }
 
-    document.getElementById('compareBtn').addEventListener('click', () => {
+    document.getElementById('sync-btn').addEventListener('click', () => {
         modalTest(redcap_record, oncore_record, handleRecordSelection);
+    });
+
+    document.getElementById('add-form-btn').addEventListener('click', () => {
+        addForm(instruments, displayed);
     });
 </script>
 
