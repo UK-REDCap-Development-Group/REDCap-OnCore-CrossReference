@@ -11,6 +11,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     // Get max_input from php.ini into a js workable variable
     const MAX_INPUT_VARS = <?= (int)$maxInputVars ?>;
     const displayed = []; // tracks displayed instruments
+    let oncore_fields = null;
+    //console.log(dictionary)
 </script>
 
 <style>
@@ -137,6 +139,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 </style>
 
 <script>
+    checkProtocolsAPI('01-BMT-131'); // It would be better to not have some sort of hardcoded value.
+    
     let keys = null;
     function checkProtocolsAPI(protocol_id) {
         const url = `<?= $module->getUrl("proxy.php") ?>&action=protocols&protocolNo=${protocol_id}`
@@ -145,8 +149,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             .then(response => response.json())
             .then(data => {
                 let dict = data[0];
-                const keys = Object.keys(dict);
-                buildTables(keys);   // ⬅️ call table builder once keys are ready
+                oncore_fields = Object.keys(dict);
+                //buildTables(keys);   // ⬅️ call table builder once keys are ready
             })
             .catch(error => {
                 console.error('Error fetching protocols:', error);
@@ -202,7 +206,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             });
         });
     }
-    checkProtocolsAPI('01-BMT-131'); // It would be better to not have some sort of hardcoded value.
 
     // hitting max input vars, how can we solve that?
     function saveMappings() {
@@ -298,7 +301,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         const modalBox = document.createElement('div');
         modalBox.className = 'modal-box';
 
-        console.log(modalOverlay, modalBox)
+        //console.log(modalOverlay, modalBox)
 
         return { modalOverlay, modalBox };
     }
@@ -387,6 +390,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 </select>
             </div> 
             <div class="modal-actions">
+                <button id="confirm_btn" class="selectA_btn">Add Form</button>
                 <button id="close_btn" class="close-button">Cancel</button>
             </div>
         `;
@@ -397,6 +401,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
         Object.entries(instruments).forEach(([key, value]) => {
             if (displayed.includes(key)) return; // Skip already displayed forms
+
             const option = document.createElement("option");
             option.value = key;
             option.textContent = value;
@@ -408,6 +413,66 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             document.body.removeChild(modalOverlay);
         };
         
+        // Add a confirm selection listener
+        document.getElementById('confirm_btn').addEventListener('click', () => {
+            const select = document.getElementById('form-select');
+            const selectedForm = select.value;
+            console.log('select.value: ' + select.value);
+            console.log('instruments[select.value]: ' + instruments[select.value]);
+            if (selectedForm) {
+                displayed.push(selectedForm); // Track displayed form
+                // Build the form table here
+                let table = document.createElement('table');
+                table.id = selectedForm + '_fields';
+                table.classList = "dataTable cell-border no-footer";
+                document.getElementById('instruments_list').appendChild(table);
+
+                let header = document.createElement('thead');
+                header.innerHTML =
+                    `<tr>
+                        <th>${instruments[selectedForm]} Fields</th>
+                        <th>OnCore Field</th>
+                    </tr>`;
+                table.appendChild(header);
+
+                let tbody = document.createElement('tbody');
+                table.appendChild(tbody);
+
+                let i = 1;
+                Object.keys(dictionary[selectedForm]).forEach(key => {
+                    let row = document.createElement('tr');
+                    row.classList = i % 2 !== 0 ? 'odd' : 'even';
+
+                    row.innerHTML =
+                        `<td style='width: 50% !important;'>
+                            <label for='${key}'>${key}</label>
+                         </td>
+                         <td style='width: 50% !important;'>
+                             <select name='${key}' id='${key}'>
+                                <option value="">None</option>
+                             </select>
+                         </td>`;
+
+                    // populate select with keys
+                    console.log('oncore_fields: ', oncore_fields);
+                    const selectField = row.querySelector(`#${key}`);
+                    oncore_fields.forEach(k => {
+                        const option = document.createElement("option");
+                        option.value = k;
+                        option.textContent = k;
+                        selectField.appendChild(option);
+                    });
+
+                    table.appendChild(row);
+                    i++;
+                });
+
+                closeModal();
+            } else {
+                alert("Please select a form to add.");
+            }
+        });
+
         // Close modal on 'Cancel' or by clicking the background
         document.getElementById('close_btn').addEventListener('click', closeModal);
         modalOverlay.addEventListener('click', (event) => {
@@ -441,12 +506,18 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         alert(`You chose the record with id: ${selectedRecord.record_id}`);
     }
 
-    document.getElementById('sync-btn').addEventListener('click', () => {
-        modalTest(redcap_record, oncore_record, handleRecordSelection);
-    });
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('sync-btn').addEventListener('click', () => {
+            modalTest(redcap_record, oncore_record, handleRecordSelection);
+        });
 
-    document.getElementById('add-form-btn').addEventListener('click', () => {
-        addForm(instruments, displayed);
+        document.getElementById('add-form-btn').addEventListener('click', () => {
+            if (typeof dictionary === 'undefined') {
+                console.error('Dictionary not defined yet.');
+                return;
+            }
+            addForm(instruments, displayed);
+        });
     });
 </script>
 
