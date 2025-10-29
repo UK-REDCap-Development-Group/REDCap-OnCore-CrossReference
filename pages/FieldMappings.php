@@ -62,6 +62,34 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     border-radius: 4px;
 }
 
+/* Center the table within the modal */
+.modal-form-selection-grid table {
+    margin: 0 auto;
+    border-collapse: collapse;
+    width: auto;
+}
+
+/* Ensure left alignment for checkbox + label */
+.modal-form-selection-grid td {
+    text-align: left;
+    padding: 6px 12px;
+}
+
+/* Keep checkbox + label nicely spaced */
+.modal-form-selection-grid .checkbox-option {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    font-size: 13px;
+}
+
+/* Optional: limit modal height and make it scrollable for long lists */
+.modal-form-selection-grid {
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
 /* Highlight class for cells with different data */
 .highlight {
     background-color: #fffbe0;
@@ -384,22 +412,28 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         let modalContent = `
             <h2>Manage Forms</h2>
             <p>Select which REDCap forms you want to synchronize.</p>
-            <div class="modal-form-selection-grid">
+            <div class="modal-form-selection-grid" style="height: 80vh; overflow-y: auto;">
+            <table class="dataTable cell-border no-footer">
         `;
 
+        let i=0;
         Object.entries(instruments).forEach(([key, value]) => {
             const isDisplayed = displayed.includes(key);
             modalContent += `
-            <div>
-                <label class="checkbox-option">
-                    <input type="checkbox" name="form-select" value="${key}" ${isDisplayed ? "checked" : ""}>
-                    ${value}
-                </label>
-            </div>
+            <tr class="${i % 2 !== 0 ? 'odd' : 'even'}">
+                <td style="width: 100% !important;">
+                    <label class="checkbox-option">
+                        <input type="checkbox" name="form-select" value="${key}" ${isDisplayed ? "checked" : ""}>
+                        ${value}
+                    </label>
+                </td>
+            </tr>
             `;
+            i = i + 1; // increment even/odd
         });
 
         modalContent += `
+            </table>
             </div>
             <div class="modal-actions">
                 <button id="confirm_btn" class="selectA_btn">Save Changes</button>
@@ -453,50 +487,68 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
             // Handle additions
             toAdd.forEach(selectedForm => {
-                displayed.push(selectedForm);
-                const table = document.createElement('table');
-                table.id = selectedForm;
-                table.classList = "dataTable cell-border no-footer";
-                document.getElementById('instruments_list').appendChild(table);
+                // Handle additions — maintain consistent order from instruments
+                Object.keys(instruments).forEach(selectedForm => {
+                    if (!selected.includes(selectedForm)) return;  // Only process selected forms
 
-                const header = document.createElement('thead');
-                header.innerHTML = `
-                    <tr>
-                        <th>${instruments[selectedForm]} Fields</th>
-                        <th>OnCore Field</th>
-                    </tr>`;
-                table.appendChild(header);
+                    // If already displayed, skip (already exists)
+                    if (displayed.includes(selectedForm)) return;
 
-                const tbody = document.createElement('tbody');
-                table.appendChild(tbody);
+                    // Add to displayed and build table
+                    displayed.push(selectedForm);
+                    const table = document.createElement('table');
+                    table.id = selectedForm;
+                    table.classList = "dataTable cell-border no-footer";
+                    document.getElementById('instruments_list').appendChild(table);
 
-                let i = 1;
-                Object.keys(dictionary[selectedForm]).forEach(key => {
-                    const row = document.createElement('tr');
-                    row.classList = i % 2 !== 0 ? 'odd' : 'even';
+                    const header = document.createElement('thead');
+                    header.innerHTML = `
+                        <tr>
+                            <th>${instruments[selectedForm]} Fields</th>
+                            <th>OnCore Field</th>
+                        </tr>`;
+                    table.appendChild(header);
 
-                    row.innerHTML = `
-                        <td style='width: 50% !important;'>
-                            <label for='${key}'>${key}</label>
-                        </td>
-                        <td style='width: 50% !important;'>
-                            <select name='${key}' id='${key}'>
-                                <option value="">None</option>
-                            </select>
-                        </td>`;
+                    const tbody = document.createElement('tbody');
+                    table.appendChild(tbody);
 
-                    // Populate select with OnCore fields
-                    const selectField = row.querySelector(`#${key}`);
-                    oncore_fields.forEach(k => {
-                        const option = document.createElement("option");
-                        option.value = k;
-                        option.textContent = k;
-                        selectField.appendChild(option);
+                    let i = 1;
+                    Object.keys(dictionary[selectedForm]).forEach(key => {
+                        const row = document.createElement('tr');
+                        row.classList = i % 2 !== 0 ? 'odd' : 'even';
+
+                        row.innerHTML = `
+                            <td style='width: 50% !important;'>
+                                <label for='${key}'>${key}</label>
+                            </td>
+                            <td style='width: 50% !important;'>
+                                <select name='${key}' id='${key}'>
+                                    <option value="">None</option>
+                                </select>
+                            </td>`;
+
+                        // Populate select with OnCore fields
+                        const selectField = row.querySelector(`#${key}`);
+                        oncore_fields.forEach(k => {
+                            const option = document.createElement("option");
+                            option.value = k;
+                            option.textContent = k;
+                            selectField.appendChild(option);
+                        });
+
+                        table.appendChild(row);
+                        i++;
                     });
-
-                    table.appendChild(row);
-                    i++;
                 });
+
+                // After all additions, re-sort the DOM tables by the instrument order
+                const container = document.getElementById('instruments_list');
+                const tables = Array.from(container.querySelectorAll('table'));
+                tables.sort((a, b) => {
+                    const keys = Object.keys(instruments);
+                    return keys.indexOf(a.id) - keys.indexOf(b.id);
+                });
+                tables.forEach(t => container.appendChild(t));
             });
 
             closeModal();
