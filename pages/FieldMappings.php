@@ -243,18 +243,18 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     <!-- Add and remove form section -->
     <div class="row selection-btns">
         <div class="col-md-6">
-            <a id="add-form-btn">
+            <a id="manage-forms-btn">
                 <div class="center-home-sects">
                     <span><i class="fa fa-plus"></i></span><br>
-                    <h5>Add Form</h5>
+                    <h5>Manage Forms</h5>
                 </div>
             </a>
         </div>
         <div class="col-md-6">
-            <a id="remove-form-btn" class="center-home-sects">
+            <a id="save-map-btn">
                 <div class="center-home-sects">
-                    <span><i class="fas fa-x"></i></span><br>
-                    <h5>Remove Form</h5>
+                    <span><i class="fa fa-floppy-disk"></i></span><br>
+                    <h5>Save Mappings</h5>
                 </div>
             </a>
         </div>
@@ -373,24 +373,36 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
-    // Populate the modal with a form selection window
-    function addForm(instruments, displayed) {
+    // Creates a modal that lets you select which forms you want to sync and ignore the ones you don't want
+    function manageForms(instruments, displayed) {
         const built = buildModal();
         if (!built) return; // The modal already exists
 
         const { modalOverlay, modalBox } = built;
 
+        // Modal header + form list
         let modalContent = `
-            <h2>Select a Form to Add</h2>
-            <p>Please choose from the available REDCap forms below.</p>
+            <h2>Manage Forms</h2>
+            <p>Select which REDCap forms you want to synchronize.</p>
             <div class="modal-form-selection-grid">
-                <select id="form-select">`;
-        
+        `;
+
+        Object.entries(instruments).forEach(([key, value]) => {
+            const isDisplayed = displayed.includes(key);
+            modalContent += `
+            <div>
+                <label class="checkbox-option">
+                    <input type="checkbox" name="form-select" value="${key}" ${isDisplayed ? "checked" : ""}>
+                    ${value}
+                </label>
+            </div>
+            `;
+        });
+
         modalContent += `
-                </select>
-            </div> 
+            </div>
             <div class="modal-actions">
-                <button id="confirm_btn" class="selectA_btn">Add Form</button>
+                <button id="confirm_btn" class="selectA_btn">Save Changes</button>
                 <button id="close_btn" class="close-button">Cancel</button>
             </div>
         `;
@@ -399,63 +411,81 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         modalOverlay.appendChild(modalBox);
         document.body.appendChild(modalOverlay);
 
-        Object.entries(instruments).forEach(([key, value]) => {
-            if (displayed.includes(key)) return; // Skip already displayed forms
-
-            const option = document.createElement("option");
-            option.value = key;
-            option.textContent = value;
-            modalBox.querySelector('#form-select').appendChild(option);
-        });
-        
-        // Close listener
+        // Close modal helper
         const closeModal = () => {
             document.body.removeChild(modalOverlay);
             checkpoint();
         };
-        
-        // Add a confirm selection listener
-        document.getElementById('confirm_btn').addEventListener('click', () => {
-            const select = document.getElementById('form-select');
-            const selectedForm = select.value;
-            console.log('select.value: ' + select.value);
-            console.log('instruments[select.value]: ' + instruments[select.value]);
-            if (selectedForm) {
-                displayed.push(selectedForm); // Track displayed form
-                // Build the form table here
-                let table = document.createElement('table');
+
+        // Confirm button logic
+        document.getElementById('confirm_btn').addEventListener('click', async () => {
+            const selected = Array.from(document.querySelectorAll('input[name="form-select"]:checked'))
+                .map(cb => cb.value);
+
+            const toAdd = selected.filter(f => !displayed.includes(f));
+            const toRemove = displayed.filter(f => !selected.includes(f));
+
+            // Handle removals first, with warnings
+            let safeToRemove = true;
+            for (const formKey of toRemove) {
+                const table = document.getElementById(formKey);
+                if (!table) continue;
+
+                // Check if table has configured data (non-empty selects)
+                const selects = Array.from(table.querySelectorAll('select'));
+                const hasConfiguredData = selects.some(sel => sel.value && sel.value !== "");
+
+                if (hasConfiguredData) {
+                    const confirmRemoval = confirm(
+                        `Warning: The form "${instruments[formKey]}" has mapped data. Are you sure you want to remove it?`
+                    );
+                    if (!confirmRemoval) {
+                        safeToRemove = false;
+                        continue; // Skip this form
+                    }
+                }
+
+                // Remove the form from DOM and displayed
+                table.remove();
+                const index = displayed.indexOf(formKey);
+                if (index !== -1) displayed.splice(index, 1);
+            }
+
+            // Handle additions
+            toAdd.forEach(selectedForm => {
+                displayed.push(selectedForm);
+                const table = document.createElement('table');
                 table.id = selectedForm;
                 table.classList = "dataTable cell-border no-footer";
                 document.getElementById('instruments_list').appendChild(table);
 
-                let header = document.createElement('thead');
-                header.innerHTML =
-                    `<tr>
+                const header = document.createElement('thead');
+                header.innerHTML = `
+                    <tr>
                         <th>${instruments[selectedForm]} Fields</th>
                         <th>OnCore Field</th>
                     </tr>`;
                 table.appendChild(header);
 
-                let tbody = document.createElement('tbody');
+                const tbody = document.createElement('tbody');
                 table.appendChild(tbody);
 
                 let i = 1;
                 Object.keys(dictionary[selectedForm]).forEach(key => {
-                    let row = document.createElement('tr');
+                    const row = document.createElement('tr');
                     row.classList = i % 2 !== 0 ? 'odd' : 'even';
 
-                    row.innerHTML =
-                        `<td style='width: 50% !important;'>
+                    row.innerHTML = `
+                        <td style='width: 50% !important;'>
                             <label for='${key}'>${key}</label>
-                         </td>
-                         <td style='width: 50% !important;'>
-                             <select name='${key}' id='${key}'>
+                        </td>
+                        <td style='width: 50% !important;'>
+                            <select name='${key}' id='${key}'>
                                 <option value="">None</option>
-                             </select>
-                         </td>`;
+                            </select>
+                        </td>`;
 
-                    // populate select with keys
-                    console.log('oncore_fields: ', oncore_fields);
+                    // Populate select with OnCore fields
                     const selectField = row.querySelector(`#${key}`);
                     oncore_fields.forEach(k => {
                         const option = document.createElement("option");
@@ -467,25 +497,18 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     table.appendChild(row);
                     i++;
                 });
-                closeModal();
-            } else {
-                alert("Please select a form to add.");
-            }
+            });
+
+            closeModal();
         });
 
-        // Close modal on 'Cancel' or by clicking the background
+        // Close modal on Cancel or background click
         document.getElementById('close_btn').addEventListener('click', closeModal);
         modalOverlay.addEventListener('click', (event) => {
-            if (event.target === modalOverlay) {
-                closeModal();
-            }
+            if (event.target === modalOverlay) closeModal();
         });
     }
 
-    // Allows removing a form from the config
-    function removeForm(displayed) {
-
-    }
 
     function checkpoint() {
         const mapping = {};
@@ -573,12 +596,12 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             modalTest(redcap_record, oncore_record, handleRecordSelection);
         });
 
-        document.getElementById('add-form-btn').addEventListener('click', () => {
+        document.getElementById('manage-forms-btn').addEventListener('click', () => {
             if (typeof dictionary === 'undefined') {
                 console.error('Dictionary not defined yet.');
                 return;
             }
-            addForm(instruments, displayed);
+            manageForms(instruments, displayed);
         });
 
         document.getElementById('save-map-btn').addEventListener('click', checkpoint);
