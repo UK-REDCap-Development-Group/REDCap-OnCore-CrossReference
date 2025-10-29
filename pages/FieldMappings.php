@@ -567,7 +567,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
         console.log(document.querySelectorAll('table'));
         // Loop through each instrument table
-        document.querySelectorAll(table).forEach(table => {
+        document.querySelectorAll('table').forEach(table => {
             const instrument = table.id;  // use table ID as the instrument name
             const instrumentMapping = {};
             
