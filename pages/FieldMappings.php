@@ -411,6 +411,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         // Close listener
         const closeModal = () => {
             document.body.removeChild(modalOverlay);
+            checkpoint();
         };
         
         // Add a confirm selection listener
@@ -423,7 +424,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 displayed.push(selectedForm); // Track displayed form
                 // Build the form table here
                 let table = document.createElement('table');
-                table.id = selectedForm + '_fields';
+                table.id = selectedForm;
                 table.classList = "dataTable cell-border no-footer";
                 document.getElementById('instruments_list').appendChild(table);
 
@@ -466,7 +467,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     table.appendChild(row);
                     i++;
                 });
-
                 closeModal();
             } else {
                 alert("Please select a form to add.");
@@ -481,6 +481,55 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             }
         });
     }
+
+    // Allows removing a form from the config
+    function removeForm(displayed) {
+
+    }
+
+    function checkpoint() {
+        const mapping = {};
+
+        console.log(document.querySelectorAll('table'));
+        // Loop through each instrument table
+        document.querySelectorAll(table).forEach(table => {
+            const instrument = table.id;  // use table ID as the instrument name
+            const instrumentMapping = {};
+            
+            if (!table.id) {
+                return;
+            }
+            // Get only the <select> elements inside *this* table
+            table.querySelectorAll('select').forEach(select => {
+                const redcapField = select.name;
+                const selectedValue = select.value;
+                instrumentMapping[redcapField] = selectedValue;
+            });
+
+            // Save this instrument's mapping under its ID
+            mapping[instrument] = instrumentMapping;
+        });
+
+        console.log('Final mapping:', mapping);
+
+        // Send to server
+        $.ajax({
+            url: "<?= $module->getUrl('scripts/save_mappings.php') ?>",
+            method: "POST",
+            data: {
+                pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                redcap_csrf_token: <?= json_encode($csrf) ?>,
+                mappings: JSON.stringify(mapping)
+            },
+            success: function (result) {
+                console.log("Checkpoint saved:", result);
+            },
+            error: function (xhr, status, error) {
+                console.error("Error in checkpoint:", error, xhr.responseText);
+            }
+        });
+    }
+
 
     const redcap_record = {
         'record_id': 101,
@@ -507,6 +556,19 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        // Load existing mappings
+        fetch("<?= $module->getUrl('scripts/load_mappings.php') ?>?pid=<?= $_GET['pid'] ?? 0 ?>")
+            .then(r => r.json())
+            .then(existingMappings => {
+                console.log(existingMappings);
+                if (!existingMappings) return;
+                for (const [field, oncoreField] of Object.entries(existingMappings)) {
+                    const select = document.querySelector(`#instruments_list select[name='${field}']`);
+                    if (select) select.value = oncoreField || "";
+                }
+            })
+            .catch(err => console.error('Error loading saved mappings:', err));
+
         document.getElementById('sync-btn').addEventListener('click', () => {
             modalTest(redcap_record, oncore_record, handleRecordSelection);
         });
@@ -517,6 +579,15 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 return;
             }
             addForm(instruments, displayed);
+        });
+
+        document.getElementById('save-map-btn').addEventListener('click', checkpoint);
+
+        // When a user changes a field mapping dropdown
+        document.addEventListener('change', function(event) {
+            if (event.target.matches('#instruments_list select')) {
+                checkpoint();
+            }
         });
     });
 </script>

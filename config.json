@@ -46,6 +46,11 @@
             "key": "oncore-client",
             "name": "OnCore Client ID",
             "type": "text"
+        },
+        {
+            "key": "field-mappings",
+            "name": "OnCore Field Mappings DO NOT EDIT",
+            "type": "json"
         }
     ],
     "links": {
