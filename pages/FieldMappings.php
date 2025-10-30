@@ -234,37 +234,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             });
         });
     }
-
-    // hitting max input vars, how can we solve that?
-    function saveMappings() {
-        const ExternalModules = window.ExternalModules || {};
-        ExternalModules.CSRF_TOKEN = '<?= $module->getCSRFToken() ?>';
-        
-        const mapping = {};
-
-        // Collect mappings
-        document.querySelectorAll("#instruments_list select").forEach(select => {
-            const redcapField = select.name;
-            const selectedValue = select.value;
-            mapping[redcapField] = selectedValue;
-        });
-
-        // Send JSON to the server
-        $.ajax({
-            url: "<?= $module->getUrl('save_mappings.php')?>",
-            method: "POST",
-            data: {
-                redcap_csrf_token: ExternalModules.CSRF_TOKEN,
-                mappings: JSON.stringify(mapping),
-            },
-            success: function (result) {
-                alert("Mappings saved: " + result.message);
-            },
-            error: function (xhr, status, error) {
-                console.error("Error saving mappings:", error);
-            }
-        })
-    }
 </script>
 
 <div class="d-flex container" style="flex-direction: column;">
@@ -561,6 +530,65 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
+    function rebuild_from_mappings(instruments, dictionary, existingMappings) {
+        const container = document.getElementById('instruments_list');
+        if (!container) {
+            console.warn('instruments_list container not found');
+            return;
+        }
+
+        container.innerHTML = ''; // Clear all existing content
+
+        // Loop through all instruments in their original order
+        Object.entries(instruments).forEach(([instrumentKey, instrumentLabel]) => {
+            const mappedFields = existingMappings[instrumentKey];
+            const dictFields = dictionary[instrumentKey];
+
+            // Only rebuild forms that have mappings saved
+            if (!mappedFields || !dictFields) return;
+
+            // Create the table for this instrument
+            const table = document.createElement('table');
+            table.id = instrumentKey;
+            table.classList = "dataTable cell-border no-footer";
+            container.appendChild(table);
+
+            // Add table header
+            const header = document.createElement('thead');
+            header.innerHTML = `
+                <tr>
+                    <th>${instrumentLabel} Fields</th>
+                    <th>OnCore Field</th>
+                </tr>`;
+            table.appendChild(header);
+
+            // Add table body
+            const tbody = document.createElement('tbody');
+            table.appendChild(tbody);
+
+            let i = 0;
+            Object.entries(dictFields).forEach(([redcapField]) => {
+                const oncoreField = mappedFields[redcapField] || ""; // stored value or blank
+
+                const row = document.createElement('tr');
+                row.classList = i % 2 === 0 ? 'even' : 'odd';
+
+                row.innerHTML = `
+                    <td style="width: 50% !important;">
+                        <label for="${instrumentKey}_${redcapField}">${redcapField}</label>
+                    </td>
+                    <td style="width: 50% !important;">
+                        <select name="${redcapField}" id="${instrumentKey}_${redcapField}">
+                            <option value="">None</option>
+                            <option value="${oncoreField}" selected>${oncoreField}</option>
+                        </select>
+                    </td>`;
+                tbody.appendChild(row);
+                i++;
+            });
+        });
+    }
+
 
     function checkpoint() {
         const mapping = {};
@@ -605,6 +633,30 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
+    function load_checkpoint() {
+        // Load existing mappings
+        $.ajax({
+            url: "<?= $module->getUrl('scripts/load_mappings.php') ?>",
+            method: "GET",
+            dataType: "json",
+            success: function (result) {
+                if (result.status !== 'success') {
+                    console.error('Failed to load mappings:', result.error || 'Unknown error');
+                    return;
+                }
+                
+                console.log(result.data);
+                const existingMappings = result.data || {};
+                console.log('Loaded mappings:', existingMappings);
+
+                // Rebuild the tables
+                rebuild_from_mappings(instruments, dictionary, existingMappings);
+            },
+            error: function (xhr, status, error) {
+                console.error('Error loading saved mappings:', error, xhr.responseText);
+            }
+        });
+    }
 
     const redcap_record = {
         'record_id': 101,
@@ -632,17 +684,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     document.addEventListener('DOMContentLoaded', () => {
         // Load existing mappings
-        fetch("<?= $module->getUrl('scripts/load_mappings.php') ?>?pid=<?= $_GET['pid'] ?? 0 ?>")
-            .then(r => r.json())
-            .then(existingMappings => {
-                console.log(existingMappings);
-                if (!existingMappings) return;
-                for (const [field, oncoreField] of Object.entries(existingMappings)) {
-                    const select = document.querySelector(`#instruments_list select[name='${field}']`);
-                    if (select) select.value = oncoreField || "";
-                }
-            })
-            .catch(err => console.error('Error loading saved mappings:', err));
+        load_checkpoint();
 
         document.getElementById('sync-btn').addEventListener('click', () => {
             modalTest(redcap_record, oncore_record, handleRecordSelection);
