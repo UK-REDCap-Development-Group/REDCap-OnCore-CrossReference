@@ -297,68 +297,53 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
             // Handle additions
             toAdd.forEach(selectedForm => {
-                // Handle additions — maintain consistent order from instruments
-                Object.keys(instruments).forEach(selectedForm => {
-                    if (!selected.includes(selectedForm)) return;  // Only process selected forms
+                displayed.push(selectedForm);
+                const table = document.createElement('table');
+                table.id = selectedForm;
+                table.classList = "dataTable cell-border no-footer";
 
-                    // If already displayed, skip (already exists)
-                    if (displayed.includes(selectedForm)) return;
+                const header = document.createElement('thead');
+                header.innerHTML = `
+                    <tr>
+                        <th>${instruments[selectedForm]} Fields</th>
+                        <th>OnCore Field</th>
+                    </tr>`;
+                table.appendChild(header);
 
-                    // Add to displayed and build table
-                    displayed.push(selectedForm);
-                    const table = document.createElement('table');
-                    table.id = selectedForm;
-                    table.classList = "dataTable cell-border no-footer";
-                    document.getElementById('instruments_list').appendChild(table);
+                const tbody = document.createElement('tbody');
+                table.appendChild(tbody);
 
-                    const header = document.createElement('thead');
-                    header.innerHTML = `
-                        <tr>
-                            <th>${instruments[selectedForm]} Fields</th>
-                            <th>OnCore Field</th>
-                        </tr>`;
-                    table.appendChild(header);
+                let i = 0;
+                Object.keys(dictionary[selectedForm]).forEach(redcapField => {
+                    const row = document.createElement('tr');
+                    row.className = i % 2 === 0 ? 'even' : 'odd';
 
-                    const tbody = document.createElement('tbody');
-                    table.appendChild(tbody);
+                    const selectId = `${selectedForm}_${redcapField}`;
+                    row.innerHTML = `
+                        <td style="width:50%"><label for="${selectId}">${redcapField}</label></td>
+                        <td style="width:50%">
+                            <select name="${redcapField}" id="${selectId}">
+                                <option value="">None</option>
+                            </select>
+                        </td>
+                    `;
 
-                    let i = 1;
-                    Object.keys(dictionary[selectedForm]).forEach(key => {
-                        const row = document.createElement('tr');
-                        row.classList = i % 2 !== 0 ? 'odd' : 'even';
-
-                        row.innerHTML = `
-                            <td style='width: 50% !important;'>
-                                <label for='${key}'>${key}</label>
-                            </td>
-                            <td style='width: 50% !important;'>
-                                <select name='${key}' id='${key}'>
-                                    <option value="">None</option>
-                                </select>
-                            </td>`;
-
-                        // Populate select with OnCore fields
-                        const selectField = row.querySelector(`#${key}`);
-                        oncore_fields.forEach(k => {
-                            const option = document.createElement("option");
-                            option.value = k;
-                            option.textContent = k;
-                            selectField.appendChild(option);
+                    // Populate the select with OnCore fields
+                    const selectEl = row.querySelector('select');
+                    if (Array.isArray(oncore_fields)) {
+                        oncore_fields.forEach(field => {
+                            const option = document.createElement('option');
+                            option.value = field;
+                            option.textContent = field;
+                            selectEl.appendChild(option);
                         });
+                    }
 
-                        table.appendChild(row);
-                        i++;
-                    });
+                    tbody.appendChild(row);
+                    i++;
                 });
 
-                // After all additions, re-sort the DOM tables by the instrument order
-                const container = document.getElementById('instruments_list');
-                const tables = Array.from(container.querySelectorAll('table'));
-                tables.sort((a, b) => {
-                    const keys = Object.keys(instruments);
-                    return keys.indexOf(a.id) - keys.indexOf(b.id);
-                });
-                tables.forEach(t => container.appendChild(t));
+                document.getElementById('instruments_list').appendChild(table);
             });
 
             closeModal(true);
@@ -366,9 +351,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
         // Close modal on Cancel or background click
         document.getElementById('close_btn').addEventListener('click', (event) => {
-            if (event.target === modalOverlay) {
-                closeModal(false); // close modal but no checkpoint   
-            }
+            closeModal(false); // close modal but no checkpoint   
         });
         modalOverlay.addEventListener('click', (event) => {
             if (event.target === modalOverlay) {
@@ -381,11 +364,14 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         const container = document.getElementById('instruments_list');
         if (!container) return;
 
-        // 1. Create a "fragment" to build the tables in memory.
-        // The loader on the live page is not touched yet.
+        // Create a fragment to build the tables in memory
         const fragment = document.createDocumentFragment();
 
-        Object.entries(instruments).forEach(([instrumentKey, instrumentLabel]) => {
+        // Only build tables for instruments in the displayed array
+        displayed.forEach(instrumentKey => {
+            const instrumentLabel = instruments[instrumentKey];
+            if (!instrumentLabel) return; // Skip if instrument doesn't exist
+            
             const mappedFields = existingMappings[instrumentKey] || {};
             const dictFields = dictionary[instrumentKey];
 
@@ -396,7 +382,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             table.id = instrumentKey;
             table.className = "dataTable cell-border no-footer";
             
-            // (Header, body, rows, etc. are all added to the 'table' variable)
             const header = document.createElement('thead');
             header.innerHTML = `<tr><th>${instrumentLabel} Fields</th><th>OnCore Field</th></tr>`;
             table.appendChild(header);
@@ -438,51 +423,46 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 i++;
             });
 
-            // 2. Add the fully built table to the fragment
             fragment.appendChild(table);
         });
 
-        // 3. NOW, clear the container (which removes the loader)
+        // Clear the container (removes the loader) and append all tables
         container.innerHTML = '';
-
-        // 4. And append the fragment (which contains all tables) in one go.
-        // This is extremely fast.
         container.appendChild(fragment);
     }
 
     function checkpoint() {
         const mapping = {};
 
-        console.log(document.querySelectorAll('table'));
-        // Loop through each instrument table
         document.querySelectorAll('table').forEach(table => {
-            const instrument = table.id;  // use table ID as the instrument name
+            const instrument = table.id;
             const instrumentMapping = {};
             
-            if (!table.id) {
+            if (!instrument) {
                 return;
             }
-            // Get only the <select> elements inside *this* table
+            
             table.querySelectorAll('select').forEach(select => {
                 const redcapField = select.name;
                 const selectedValue = select.value;
                 instrumentMapping[redcapField] = selectedValue;
             });
 
-            // Save this instrument's mapping under its ID
             mapping[instrument] = instrumentMapping;
         });
 
         console.log('Final mapping:', mapping);
+        console.log('Displayed instruments:', displayed);
 
-        // Send to server
+        // Send to server - include the displayed array
         $.ajax({
             url: "<?= $module->getUrl('scripts/save_mappings.php') ?>",
             method: "POST",
             data: {
                 pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
                 redcap_csrf_token: <?= json_encode($csrf) ?>,
-                mappings: JSON.stringify(mapping)
+                mappings: JSON.stringify(mapping),
+                displayed: JSON.stringify(displayed)  // <-- Save which forms should be displayed
             },
             success: function (result) {
                 console.log("Checkpoint saved:", result);
@@ -494,7 +474,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     function load_checkpoint() {
-        // Load existing mappings
         $.ajax({
             url: "<?= $module->getUrl('scripts/load_mappings.php') ?>",
             method: "GET",
@@ -510,16 +489,16 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 }
 
                 const existingMappings = result.data || {};
+                const savedDisplayed = result.displayed || []; // <-- Load the saved displayed list
 
-                displayed.length = 0; // Clear the array
-                Object.keys(existingMappings).forEach(instrumentKey => {
-                    // Only add if the instrument still exists in REDCap
+                displayed.length = 0;
+                // Use the saved displayed list instead of mapping keys
+                savedDisplayed.forEach(instrumentKey => {
                     if (instruments[instrumentKey]) {
                         displayed.push(instrumentKey);
                     }
                 });
 
-                // Rebuild the tables based on the now-populated 'displayed' array
                 rebuild_from_mappings(instruments, dictionary, existingMappings);
             },
             error: function (xhr, status, error) {
