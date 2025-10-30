@@ -7,184 +7,19 @@ $csrf = $module->getCSRFToken();
 // Will use this value later for batching requests if max_input is hit
 $maxInputVars = ini_get('max_input_vars') ?: 1000;
 ?>
+
+<link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
+
 <script>
     // Get max_input from php.ini into a js workable variable
     const MAX_INPUT_VARS = <?= (int)$maxInputVars ?>;
     const displayed = []; // tracks displayed instruments
     let oncore_fields = null;
+    const protocol_id = '15-0927-F1V';
     //console.log(dictionary)
 </script>
 
-<style>
-/* Modal Overlay: Dark background behind the popup */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.6);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
-
-/* Modal Box: The main content container */
-.modal-box {
-    background-color: #ffffff;
-    padding: 25px;
-    border-radius: 8px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-    width: 90%;
-    max-width: 600px;
-    text-align: center;
-}
-
-/* Comparison Grid: Displays records side-by-side */
-.modal-comparison-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin: 20px 0;
-    text-align: left;
-}
-
-.modal-record-header {
-    font-weight: bold;
-    padding-bottom: 5px;
-    border-bottom: 2px solid #ccc;
-}
-
-.modal-cell {
-    padding: 8px;
-    background-color: #f9f9f9;
-    border-radius: 4px;
-}
-
-/* Center the table within the modal */
-.modal-form-selection-grid table {
-    margin: 0 auto;
-    border-collapse: collapse;
-    width: auto;
-}
-
-/* Ensure left alignment for checkbox + label */
-.modal-form-selection-grid td {
-    text-align: left;
-    padding: 6px 12px;
-}
-
-/* Keep checkbox + label nicely spaced */
-.modal-form-selection-grid .checkbox-option {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
-    font-size: 13px;
-}
-
-/* Optional: limit modal height and make it scrollable for long lists */
-.modal-form-selection-grid {
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
-/* Highlight class for cells with different data */
-.highlight {
-    background-color: #fffbe0;
-    font-weight: bold;
-}
-
-/* Action Buttons */
-.modal-actions {
-    margin-top: 20px;
-    display: flex;
-    justify-content: space-around;
-}
-
-.modal-actions button {
-    padding: 10px 20px;
-    border-radius: 5px;
-    border: none;
-    cursor: pointer;
-    font-size: 16px;
-}
-
-.modal-actions button:hover {
-    opacity: 0.8;
-}
-
-#selectA_btn, #selectB_btn {
-    background-color: #28a745;
-    color: white;
-}
-
-.close-button {
-    background-color: #dc3545;
-    color: white;
-}
-
-.center-home-sects span {
-    font-size: 5vw;
-    color: #606060;
-    -webkit-transition: background-color 100ms linear;
-    -ms-transition: background-color 100ms linear;
-    transition: background-color 100ms linear;
-}
-
-.selection-btns {
-    margin: 0 10% 0 10%;
-}
-
-.selection-btns a {
-    text-decoration: none;
-}
-
-.center-home-sects {
-    text-align:center;
-    border-radius: 5%;
-    padding: 5% 0 5% 0;
-    margin:0;
-    color: #606060;
-    -webkit-transition: background-color 100ms linear;
-    -ms-transition: background-color 100ms linear;
-    transition: background-color 100ms linear;
-}
-
-.center-home-sects:hover {
-    color: #fff;
-    background-color: #606060;
-}
-
-.center-home-sects:hover span{
-    color: #fff;
-}
-
-.hide {
-    display: none;
-}
-</style>
-
 <script>
-    checkProtocolsAPI('01-BMT-131'); // It would be better to not have some sort of hardcoded value.
-    
-    let keys = null;
-    function checkProtocolsAPI(protocol_id) {
-        const url = `<?= $module->getUrl("proxy.php") ?>&action=protocols&protocolNo=${protocol_id}`
-
-        fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                let dict = data[0];
-                oncore_fields = Object.keys(dict);
-                //buildTables(keys);   // ⬅️ call table builder once keys are ready
-            })
-            .catch(error => {
-                console.error('Error fetching protocols:', error);
-            });
-    }
-
     function buildTables(keys) {
         const inst_list = document.getElementById('instruments_list');
 
@@ -259,7 +94,10 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     
     <!-- List of forms and their fields -->
     <div id="instruments_list" class="row" style="flex-direction: column;">
-
+        <div id="forms-loader" class="loader-container">
+            <div class="loader"></div>
+            <p style="margin-top: 15px;">Loading Saved Mappings...</p>
+        </div>
     </div>
 
     <!-- Save and sync buttons -->
@@ -415,9 +253,12 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         document.body.appendChild(modalOverlay);
 
         // Close modal helper
-        const closeModal = () => {
+        const closeModal = (shouldCheckpoint = false) => {
             document.body.removeChild(modalOverlay);
-            checkpoint();
+            
+            if (shouldCheckpoint) {
+                checkpoint();
+            }
         };
 
         // Confirm button logic
@@ -520,75 +361,94 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 tables.forEach(t => container.appendChild(t));
             });
 
-            closeModal();
+            closeModal(true);
         });
 
         // Close modal on Cancel or background click
-        document.getElementById('close_btn').addEventListener('click', closeModal);
+        document.getElementById('close_btn').addEventListener('click', (event) => {
+            if (event.target === modalOverlay) {
+                closeModal(false); // close modal but no checkpoint   
+            }
+        });
         modalOverlay.addEventListener('click', (event) => {
-            if (event.target === modalOverlay) closeModal();
+            if (event.target === modalOverlay) {
+                closeModal(false); // close modal but no checkpoint   
+            }
         });
     }
 
     function rebuild_from_mappings(instruments, dictionary, existingMappings) {
         const container = document.getElementById('instruments_list');
-        if (!container) {
-            console.warn('instruments_list container not found');
-            return;
-        }
+        if (!container) return;
 
-        container.innerHTML = ''; // Clear all existing content
+        // 1. Create a "fragment" to build the tables in memory.
+        // The loader on the live page is not touched yet.
+        const fragment = document.createDocumentFragment();
 
-        // Loop through all instruments in their original order
         Object.entries(instruments).forEach(([instrumentKey, instrumentLabel]) => {
-            const mappedFields = existingMappings[instrumentKey];
+            const mappedFields = existingMappings[instrumentKey] || {};
             const dictFields = dictionary[instrumentKey];
 
-            // Only rebuild forms that have mappings saved
-            if (!mappedFields || !dictFields) return;
+            if (!dictFields) return; // skip if no dictionary
 
-            // Create the table for this instrument
+            // Create table
             const table = document.createElement('table');
             table.id = instrumentKey;
-            table.classList = "dataTable cell-border no-footer";
-            container.appendChild(table);
-
-            // Add table header
+            table.className = "dataTable cell-border no-footer";
+            
+            // (Header, body, rows, etc. are all added to the 'table' variable)
             const header = document.createElement('thead');
-            header.innerHTML = `
-                <tr>
-                    <th>${instrumentLabel} Fields</th>
-                    <th>OnCore Field</th>
-                </tr>`;
+            header.innerHTML = `<tr><th>${instrumentLabel} Fields</th><th>OnCore Field</th></tr>`;
             table.appendChild(header);
 
-            // Add table body
             const tbody = document.createElement('tbody');
             table.appendChild(tbody);
 
             let i = 0;
-            Object.entries(dictFields).forEach(([redcapField]) => {
-                const oncoreField = mappedFields[redcapField] || ""; // stored value or blank
-
+            Object.keys(dictFields).forEach(redcapField => {
                 const row = document.createElement('tr');
-                row.classList = i % 2 === 0 ? 'even' : 'odd';
+                row.className = i % 2 === 0 ? 'even' : 'odd';
 
+                const selectId = `${instrumentKey}_${redcapField}`;
                 row.innerHTML = `
-                    <td style="width: 50% !important;">
-                        <label for="${instrumentKey}_${redcapField}">${redcapField}</label>
-                    </td>
-                    <td style="width: 50% !important;">
-                        <select name="${redcapField}" id="${instrumentKey}_${redcapField}">
+                    <td style="width:50%"><label for="${selectId}">${redcapField}</label></td>
+                    <td style="width:50%">
+                        <select name="${redcapField}" id="${selectId}">
                             <option value="">None</option>
-                            <option value="${oncoreField}" selected>${oncoreField}</option>
                         </select>
-                    </td>`;
+                    </td>
+                `;
+
                 tbody.appendChild(row);
+
+                // Populate select with oncore_fields
+                const selectEl = row.querySelector('select');
+                if (Array.isArray(oncore_fields)) {
+                    oncore_fields.forEach(field => {
+                        const option = document.createElement('option');
+                        option.value = field;
+                        option.textContent = field;
+
+                        // mark selected if it matches the saved mapping
+                        if (mappedFields[redcapField] === field) option.selected = true;
+
+                        selectEl.appendChild(option);
+                    });
+                }
                 i++;
             });
-        });
-    }
 
+            // 2. Add the fully built table to the fragment
+            fragment.appendChild(table);
+        });
+
+        // 3. NOW, clear the container (which removes the loader)
+        container.innerHTML = '';
+
+        // 4. And append the fragment (which contains all tables) in one go.
+        // This is extremely fast.
+        container.appendChild(fragment);
+    }
 
     function checkpoint() {
         const mapping = {};
@@ -642,21 +502,64 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             success: function (result) {
                 if (result.status !== 'success') {
                     console.error('Failed to load mappings:', result.error || 'Unknown error');
+                    const loader = document.getElementById('forms-loader');
+                    if (loader) {
+                        loader.innerHTML = '<p style="color: red; text-align: center;"><b>Error:</b> Could not load saved field mappings.</p>';
+                    }
                     return;
                 }
-                
-                console.log(result.data);
-                const existingMappings = result.data || {};
-                console.log('Loaded mappings:', existingMappings);
 
-                // Rebuild the tables
+                const existingMappings = result.data || {};
+
+                displayed.length = 0; // Clear the array
+                Object.keys(existingMappings).forEach(instrumentKey => {
+                    // Only add if the instrument still exists in REDCap
+                    if (instruments[instrumentKey]) {
+                        displayed.push(instrumentKey);
+                    }
+                });
+
+                // Rebuild the tables based on the now-populated 'displayed' array
                 rebuild_from_mappings(instruments, dictionary, existingMappings);
             },
             error: function (xhr, status, error) {
                 console.error('Error loading saved mappings:', error, xhr.responseText);
+                const loader = document.getElementById('forms-loader');
+                if (loader) {
+                    loader.innerHTML = '<p style="color: red; text-align: center;"><b>Error:</b> Could not load saved field mappings.</p>';
+                }
             }
         });
     }
+
+    function populateDropdowns(existingMappings = {}) {
+        // Loop through all tables (one per instrument)
+        document.querySelectorAll("#instruments_list table").forEach(table => {
+            const instrument = table.id; // e.g., 'demographics'
+
+            // Skip if no table ID
+            if (!instrument) return;
+
+            // Loop through all selects inside this table
+            table.querySelectorAll("select").forEach(select => {
+                const redcapField = select.name;
+
+                // Clear existing options
+                select.innerHTML = '';
+
+                // Add "None" option first
+                const noneOption = document.createElement('option');
+                noneOption.value = '';
+                noneOption.textContent = 'None';
+                select.appendChild(noneOption);
+
+                // Determine the pre-selected value (from saved mappings)
+                const preSelected = (existingMappings[instrument] || {})[redcapField] || '';
+                // If preSelected is empty, "None" remains selected automatically
+            });
+        });
+    }
+
 
     const redcap_record = {
         'record_id': 101,
@@ -683,8 +586,22 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     document.addEventListener('DOMContentLoaded', () => {
-        // Load existing mappings
-        load_checkpoint();
+        $.ajax({
+            url: `<?= $module->getUrl("proxy.php") ?>&action=protocols&protocolNo=${protocol_id}`,
+            method: "GET",
+            dataType: "json",
+            success: function (data) {
+                let dict = data[0];
+                oncore_fields = Object.keys(dict);
+                console.log('OnCore fields fetched:', oncore_fields);
+                
+                // Load existing mappings
+                load_checkpoint();
+            },
+            error: function (xhr, status, error) {
+                console.error('Error fetching protocols:', error, xhr.responseText);
+            }
+        });
 
         document.getElementById('sync-btn').addEventListener('click', () => {
             modalTest(redcap_record, oncore_record, handleRecordSelection);
