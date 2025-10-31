@@ -15,7 +15,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     const MAX_INPUT_VARS = <?= (int)$maxInputVars ?>;
     const displayed = []; // tracks displayed instruments
     let oncore_fields = null;
-    const protocol_id = '15-0927-F1V';
+    const protocolNo = '15-0927-F1V'; // sample that was arbitrarily set, need a way around this
     //console.log(dictionary)
 </script>
 
@@ -83,6 +83,15 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             </a>
         </div>
         <div class="col-md-6">
+            <a id="sync-btn" class="center-home-sects">
+                <div class="center-home-sects">
+                    <span><i class="fas fa-arrows-rotate"></i></span><br>
+                    <h5>Sync with OnCore</h5>
+                </div>
+            </a>
+        </div>
+    </div>
+        <!-- <div class="col-md-6">
             <a id="save-map-btn">
                 <div class="center-home-sects">
                     <span><i class="fa fa-floppy-disk"></i></span><br>
@@ -90,7 +99,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 </div>
             </a>
         </div>
-    </div>
+    </div> -->
     
     <!-- List of forms and their fields -->
     <div id="instruments_list" class="row" style="flex-direction: column;">
@@ -102,11 +111,19 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     <!-- Save and sync buttons -->
     <div class="row selection-btns">
-        <div class="col-md-6">
+        <!-- <div class="col-md-6">
             <a id="save-map-btn">
                 <div class="center-home-sects">
                     <span><i class="fa fa-floppy-disk"></i></span><br>
                     <h5>Save Mappings</h5>
+                </div>
+            </a>
+        </div> -->
+        <div class="col-md-6">
+            <a id="manage-forms-btn">
+                <div class="center-home-sects">
+                    <span><i class="fa fa-plus"></i></span><br>
+                    <h5>Manage Forms</h5>
                 </div>
             </a>
         </div>
@@ -564,9 +581,25 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         alert(`You chose the record with id: ${selectedRecord.record_id}`);
     }
 
+    // Uses the eIRB from demographics to request data from OnCore for a given form
+    function getFromOnCore(eIRB) {
+        $.ajax({
+            url: `<?= $module->getUrl("proxy.php") ?>&action=protocols&protocolNo=${eIRB}`,
+            method: "GET",
+            dataType: "json",
+            success: function (data) {
+                let dict = data[0];
+                console.log(dict);
+            },
+            error: function (xhr, status, error) {
+                console.error('Error fetching protocols:', error, xhr.responseText);
+            }
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         $.ajax({
-            url: `<?= $module->getUrl("proxy.php") ?>&action=protocols&protocolNo=${protocol_id}`,
+            url: `<?= $module->getUrl("proxy.php") ?>&action=protocols&protocolNo=${protocolNo}`,
             method: "GET",
             dataType: "json",
             success: function (data) {
@@ -582,6 +615,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             }
         });
 
+        getFromOnCore(protocolNo);
+
         document.getElementById('sync-btn').addEventListener('click', () => {
             modalTest(redcap_record, oncore_record, handleRecordSelection);
         });
@@ -594,7 +629,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             manageForms(instruments, displayed);
         });
 
-        document.getElementById('save-map-btn').addEventListener('click', checkpoint);
+        //document.getElementById('save-map-btn').addEventListener('click', checkpoint);
 
         // When a user changes a field mapping dropdown
         document.addEventListener('change', function(event) {
