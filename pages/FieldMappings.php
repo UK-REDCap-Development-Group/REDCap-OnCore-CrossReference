@@ -16,7 +16,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     const displayed = []; // tracks displayed instruments
     let oncore_fields = null;
     const protocolNo = '15-0927-F1V'; // sample that was arbitrarily set, need a way around this
-    //console.log(dictionary)
+    let mappings = false;
 </script>
 
 <script>
@@ -505,8 +505,10 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     return;
                 }
 
-                const existingMappings = result.data || {};
+                mappings = result.data || {};
                 const savedDisplayed = result.displayed || []; // <-- Load the saved displayed list
+                
+
 
                 displayed.length = 0;
                 // Use the saved displayed list instead of mapping keys
@@ -516,7 +518,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     }
                 });
 
-                rebuild_from_mappings(instruments, dictionary, existingMappings);
+                rebuild_from_mappings(instruments, dictionary, mappings);
             },
             error: function (xhr, status, error) {
                 console.error('Error loading saved mappings:', error, xhr.responseText);
@@ -582,14 +584,26 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     // Uses the eIRB from demographics to request data from OnCore for a given form
-    function getFromOnCore(eIRB) {
+    function getFromOnCore(recordID, eIRB) {
         $.ajax({
-            url: `<?= $module->getUrl("proxy.php") ?>&action=protocols&protocolNo=${eIRB}`,
+            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${eIRB}`,
             method: "GET",
             dataType: "json",
             success: function (data) {
                 let dict = data[0];
-                console.log(dict);
+                let construct = {};
+
+                // Build the construct so that it has the key matching REDCap field key,
+                // but the value of the OnCore field.
+                Object.entries(mappings).forEach(([form, fields]) => {
+                    Object.entries(fields).forEach(([redcapField, oncoreField]) => {
+                        if (oncoreField != '') {
+                            construct[redcapField] = dict[oncoreField];
+                        }
+                    });
+                });
+
+                console.log('OnCore data fetched for synchronization:', construct);
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching protocols:', error, xhr.responseText);
@@ -599,7 +613,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     document.addEventListener('DOMContentLoaded', () => {
         $.ajax({
-            url: `<?= $module->getUrl("proxy.php") ?>&action=protocols&protocolNo=${protocolNo}`,
+            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocolNo}`,
             method: "GET",
             dataType: "json",
             success: function (data) {
@@ -615,10 +629,9 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             }
         });
 
-        getFromOnCore(protocolNo);
-
         document.getElementById('sync-btn').addEventListener('click', () => {
             modalTest(redcap_record, oncore_record, handleRecordSelection);
+            getFromOnCore(11, protocolNo); // manual test using Saltzman record
         });
 
         document.getElementById('manage-forms-btn').addEventListener('click', () => {
