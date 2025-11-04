@@ -159,7 +159,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         return { modalOverlay, modalBox };
     }
 
-    function modalTest(recordA, recordB, onSelectCallback) {
+    function comparisonModal(redcap, oncore, onSelectCallback) {
         const built = buildModal();
         if (!built) return; // The modal already exists
 
@@ -169,17 +169,16 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             <h2>Record Comparison</h2>
             <p>Please select the record with the most accurate information.</p>
             <div class="modal-comparison-grid">
-                <div class="modal-record-header">Record A</div>
-                <div class="modal-record-header">Record B</div>
+                <div class="modal-record-header">REDCap</div>
+                <div class="modal-record-header">OnCore</div>
         `;
 
-        // --- 2. Populate Comparison Grid ---
         // Get all unique keys from both records to display all fields
         const allKeys = [...new Set([...Object.keys(recordA), ...Object.keys(recordB)])];
 
         allKeys.forEach(key => {
-            const valueA = recordA[key] || 'N/A';
-            const valueB = recordB[key] || 'N/A';
+            const valueA = redcap[key] || 'N/A';
+            const valueB = oncore[key] || 'N/A';
             // Highlight differing values
             const highlightClass = valueA !== valueB ? 'highlight' : '';
 
@@ -202,7 +201,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         modalOverlay.appendChild(modalBox);
         document.body.appendChild(modalOverlay);
 
-        // --- 3. Add Event Listeners ---
         const closeModal = () => {
             document.body.removeChild(modalOverlay);
         };
@@ -584,28 +582,49 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         alert(`You chose the record with id: ${selectedRecord.record_id}`);
     }
 
-    // Uses the eIRB from demographics to request data from OnCore for a given form
-    function getFromOnCore(recordID, eIRB) {
+    // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
+    function getFromOnCoreWithIRBNo(record) {
+        const protocol_number = record['irb_number']; // protocol #
         $.ajax({
-            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${eIRB}`,
+            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocol_number}`,
             method: "GET",
             dataType: "json",
             success: function (data) {
                 let dict = data[0];
-                let construct = {};
 
                 // Build the construct so that it has the key matching REDCap field key,
                 // but the value of the OnCore field.
                 Object.entries(mappings).forEach(([form, fields]) => {
                     Object.entries(fields).forEach(([redcapField, oncoreField]) => {
-                        if (oncoreField != '') {
-                            construct[redcapField] = dict[oncoreField];
+                        if (oncoreField === '') {
+                            // do nothing
+                        }
+                        else if (record[redcapField] === dict[oncoreField]) {
+                            console.log('Values match for field:', redcapField);
+                            
+                            let redcap = {
+                                'record_id': record['record_id'],
+                                'irb_number': record['irb_number'],
+                                'eirb_number': record['eirb_number'],
+                                // the actual item of concern rn
+                            };
+
+                            let oncore = {
+                                'record_id': record['record_id'],
+                                'irb_number': record['irb_number'],
+                                'eirb_number': dict['eIRB'],
+                                // the actual item of concern rn
+                            };
+                            // run the modal code here now
+                        }
+                        else {
+                            // insert value from OnCore into record
+                            record[redcapField] = dict[oncoreField];
                         }
                     });
                 });
-
-                console.log('OnCore data fetched for synchronization:', construct);
-                return construct;
+                // save the record somehow
+                console.log('Record mapped with OnCore data: ', record);
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching protocols:', error, xhr.responseText);
@@ -614,6 +633,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     function getFromREDCap(field, value) {
+        console.log('pressed');
         $.ajax({
             url: '<?= $module->getUrl("scripts/get_records.php") ?>',
             data: { 
@@ -622,8 +642,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             },
             success: function (data) {
                 let record = data[0];
-                console.log('REDCap data fetched for synchronization:', data);
-                return record;
+                getFromOnCoreWithIRBNo(record);
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
@@ -651,7 +670,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
         document.getElementById('sync-btn').addEventListener('click', () => {
             //modalTest(redcap_record, oncore_record, handleRecordSelection);
-            getFromOnCore(11, protocolNo); // manual test using Saltzman record
+            //let oncore = getFromOnCore(11, protocolNo); // manual test using Saltzman record
             getFromREDCap('eirb_number', eIRBno);
         });
 
