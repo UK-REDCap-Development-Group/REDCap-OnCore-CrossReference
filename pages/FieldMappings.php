@@ -73,7 +73,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 </script>
 
 <div class="d-flex container" style="flex-direction: column;">
-    <!-- Add and remove form section -->
+    <!-- Manage and sync buttons -->
     <div class="row selection-btns">
         <div class="col-md-6">
             <a id="manage-forms-btn">
@@ -92,15 +92,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             </a>
         </div>
     </div>
-        <!-- <div class="col-md-6">
-            <a id="save-map-btn">
-                <div class="center-home-sects">
-                    <span><i class="fa fa-floppy-disk"></i></span><br>
-                    <h5>Save Mappings</h5>
-                </div>
-            </a>
-        </div>
-    </div> -->
     
     <!-- List of forms and their fields -->
     <div id="instruments_list" class="row" style="flex-direction: column;">
@@ -110,16 +101,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         </div>
     </div>
 
-    <!-- Save and sync buttons -->
+    <!-- Manage and sync buttons -->
     <div class="row selection-btns">
-        <!-- <div class="col-md-6">
-            <a id="save-map-btn">
-                <div class="center-home-sects">
-                    <span><i class="fa fa-floppy-disk"></i></span><br>
-                    <h5>Save Mappings</h5>
-                </div>
-            </a>
-        </div> -->
         <div class="col-md-6">
             <a id="manage-forms-btn">
                 <div class="center-home-sects">
@@ -170,29 +153,71 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             <p>Please select the record with the most accurate information.</p>
             <div class="modal-comparison-grid">
                 <div class="modal-record-header">REDCap</div>
-                <div class="modal-record-header">OnCore</div>
+                <table class="dataTable cell-border no-footer" id='redcap_table'>
+                    <thead>
+                        <tr>
+                            <th>Field Name</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+
         `;
 
-        // Get all unique keys from both records to display all fields
-        const allKeys = [...new Set([...Object.keys(recordA), ...Object.keys(recordB)])];
-
-        allKeys.forEach(key => {
-            const valueA = redcap[key] || 'N/A';
-            const valueB = oncore[key] || 'N/A';
-            // Highlight differing values
-            const highlightClass = valueA !== valueB ? 'highlight' : '';
+        const redcap_table = document.getElementById('redcap_table');
+        const oncore_table = document.getElementById('oncore_table');
+        
+        // Build REDCap table rows
+        let i = 0; // set up an incrementer to alternate row style
+        Object.keys(redcap).forEach(key => {
+            const redcapValue = redcap[key] ?? 'N/A';
+            const oncoreValue = oncore[key] ?? 'N/A';
+            const highlightClass = redcapValue !== oncoreValue ? 'highlight' : '';
 
             modalContent += `
-                <div class="modal-cell ${highlightClass}">${valueA}</div>
-                <div class="modal-cell ${highlightClass}">${valueB}</div>
+                <tr class="${i % 2 !== 0 ? 'odd' : 'even'}">
+                    <td class="${highlightClass}">${key}</td>
+                    <td class="${highlightClass}">${redcapValue}</td>
+                </tr>
             `;
+            
+            i = i + 1;
         });
 
         modalContent += `
-            </div> 
+                </table>
+                <div class="modal-record-header">OnCore</div>
+                <table class="dataTable cell-border no-footer" id="oncore_table">
+                    <thead>
+                        <tr>
+                            <th>Field Name</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+        `;
+
+        // Build OnCore table rows
+        i = 0; // Redefine i as 0 so that our color incrementation should match from both sides
+        Object.keys(oncore).forEach(key => {
+            const redcapValue = redcap[key] ?? 'N/A';
+            const oncoreValue = oncore[key] ?? 'N/A';
+            const highlightClass = redcapValue !== oncoreValue ? 'highlight' : '';
+
+            modalContent += `
+                <tr class="${i % 2 !== 0 ? 'odd' : 'even'}">
+                    <td class="${highlightClass}">${key}</td>
+                    <td class="${highlightClass}">${redcapValue}</td>
+                </tr>
+            `;
+
+            i = i + 1;
+        });
+
+        modalContent += `
+                </table>
+            </div>
             <div class="modal-actions">
-                <button id="selectA_btn">Select Record A</button>
-                <button id="selectB_btn">Select Record B</button>
+                <button id="select_redcap">Save REDCap Data</button>
+                <button id="select_oncore">Save OnCore Data</button>
                 <button id="close_btn" class="close-button">Cancel</button>
             </div>
         `;
@@ -201,26 +226,21 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         modalOverlay.appendChild(modalBox);
         document.body.appendChild(modalOverlay);
 
-        const closeModal = () => {
-            document.body.removeChild(modalOverlay);
-        };
+        const closeModal = () => document.body.removeChild(modalOverlay);
 
-        document.getElementById('selectA_btn').addEventListener('click', () => {
-            onSelectCallback(recordA); // Pass selected record to the callback
+        document.getElementById('select_redcap').addEventListener('click', () => {
+            onSelectCallback(redcap);
             closeModal();
         });
 
-        document.getElementById('selectB_btn').addEventListener('click', () => {
-            onSelectCallback(recordB);
+        document.getElementById('select_oncore').addEventListener('click', () => {
+            onSelectCallback(oncore);
             closeModal();
         });
-        
-        // Close modal on 'Cancel' or by clicking the background
+
         document.getElementById('close_btn').addEventListener('click', closeModal);
         modalOverlay.addEventListener('click', (event) => {
-            if (event.target === modalOverlay) {
-                closeModal();
-            }
+            if (event.target === modalOverlay) closeModal();
         });
     }
 
@@ -467,8 +487,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             mapping[instrument] = instrumentMapping;
         });
 
-        console.log('Final mapping:', mapping);
-        console.log('Displayed instruments:', displayed);
+        //console.log('Final mapping:', mapping);
+        //console.log('Displayed instruments:', displayed);
 
         // Send to server - include the displayed array
         $.ajax({
@@ -506,8 +526,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
                 mappings = result.data || {};
                 const savedDisplayed = result.displayed || []; // <-- Load the saved displayed list
-                
-
 
                 displayed.length = 0;
                 // Use the saved displayed list instead of mapping keys
@@ -557,25 +575,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
-
-    const redcap_record = {
-        'record_id': 101,
-        'eirb': '10001',
-        'coordinator': "John Doe",
-        'depart': "Oncology",
-        'start_date': '1/12/24',
-        'end_date': '1/12/25'
-    }
-
-    const oncore_record = {
-        'record_id': 101,
-        'eirb': '10001',
-        'coordinator': "John Doe",
-        'depart': "Markey Cancer Center",
-        'start_date': '1/12/24',
-        'end_date': '1/12/25'
-    }
-
     // Will eventually handle overwriting data
     function handleRecordSelection(selectedRecord) {
         console.log("The user selected this record:", selectedRecord);
@@ -591,34 +590,35 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             dataType: "json",
             success: function (data) {
                 let dict = data[0];
-
-                // Build the construct so that it has the key matching REDCap field key,
-                // but the value of the OnCore field.
+                console.log('OnCore data fetched for protocol:', dict);
+                // Move through our mappings and synchronize the data
                 Object.entries(mappings).forEach(([form, fields]) => {
                     Object.entries(fields).forEach(([redcapField, oncoreField]) => {
                         if (oncoreField === '') {
                             // do nothing
                         }
-                        else if (record[redcapField] === dict[oncoreField]) {
+                        else if (record[redcapField] != dict[oncoreField]) {
                             console.log('Values match for field:', redcapField);
                             
                             let redcap = {
                                 'record_id': record['record_id'],
                                 'irb_number': record['irb_number'],
                                 'eirb_number': record['eirb_number'],
-                                // the actual item of concern rn
+                                [redcapField]: record[redcapField] // item of concern
                             };
 
                             let oncore = {
                                 'record_id': record['record_id'],
                                 'irb_number': record['irb_number'],
                                 'eirb_number': dict['eIRB'],
-                                // the actual item of concern rn
+                                [oncoreField]: dict[oncoreField] // item of concern
                             };
-                            // run the modal code here now
+                            
+                            // Run comparison modal on the two objects above
+                            comparisonModal(redcap, oncore, handleRecordSelection);
                         }
                         else {
-                            // insert value from OnCore into record
+                            // insert value from OnCore into record if REDCap has no value, but the field is mapped
                             record[redcapField] = dict[oncoreField];
                         }
                     });
