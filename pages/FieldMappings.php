@@ -16,6 +16,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     const displayed = []; // tracks displayed instruments
     let oncore_fields = null;
     const protocolNo = '15-0927-F1V'; // sample that was arbitrarily set, need a way around this
+    const eIRBno = '46000'; // sample that was arbitrarily set, need a way around this
     let mappings = false;
 </script>
 
@@ -604,9 +605,28 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 });
 
                 console.log('OnCore data fetched for synchronization:', construct);
+                return construct;
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching protocols:', error, xhr.responseText);
+            }
+        });
+    }
+
+    function getFromREDCap(field, value) {
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/get_records.php") ?>',
+            data: { 
+                'field': field,
+                'value': value
+            },
+            success: function (data) {
+                let record = data[0];
+                console.log('REDCap data fetched for synchronization:', data);
+                return record;
+            },
+            error: function (xhr, status, error) {
+                console.error('Error fetching REDCap record:', error, xhr.responseText);
             }
         });
     }
@@ -630,8 +650,9 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
 
         document.getElementById('sync-btn').addEventListener('click', () => {
-            modalTest(redcap_record, oncore_record, handleRecordSelection);
+            //modalTest(redcap_record, oncore_record, handleRecordSelection);
             getFromOnCore(11, protocolNo); // manual test using Saltzman record
+            getFromREDCap('eirb_number', eIRBno);
         });
 
         document.getElementById('manage-forms-btn').addEventListener('click', () => {

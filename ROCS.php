@@ -10,7 +10,8 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 
 class ROCS extends AbstractExternalModule
-{
+{   
+
     // Functional proxy to hit from frontend to communicate with external APIs. Used in proxy.php
     // This version is assuming data is included as a json (not using JSON.stringify).
     // Ensure requests to proxyPost will have the csrf token included in the json.
@@ -174,6 +175,7 @@ class ROCS extends AbstractExternalModule
             $data = REDCap::getData($project_id, 'csv');
             $project_title = REDCap::getProjectTitle();
             $filename = $this->getProjectSetting('filename');
+            $apiUrl = APP_PATH_WEBROOT_FULL . 'api/';
 
             ?>
             <script>
@@ -183,6 +185,7 @@ class ROCS extends AbstractExternalModule
                 const classifier = <?= json_encode($classifier) ?>;
                 const email = <?= json_encode($email) ?>;
                 const project_title = <?= json_encode($project_title) ?>;
+                const API_URL = <?= json_encode($apiUrl); ?>;
             </script>
             <?php
         }
