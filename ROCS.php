@@ -186,6 +186,7 @@ class ROCS extends AbstractExternalModule
                 const email = <?= json_encode($email) ?>;
                 const project_title = <?= json_encode($project_title) ?>;
                 const API_URL = <?= json_encode($apiUrl); ?>;
+                const project_id = <?= json_encode($_GET['pid']); ?>;
             </script>
             <?php
         }

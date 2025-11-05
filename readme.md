@@ -1,0 +1,5 @@
+The REDCap OnCore Cross Reference (ROCS) tool provides a highly configurable connection between a REDCap project and an OnCore instance. ROCS adds a new page on the left-hand menu of a project called "OnCore Field Mappings" which allows a user to include or disclude forms from a project for mapping.
+
+Once a form has been selected for mapping, the user is able to select a field pulled from OnCore's API in a dropdown. Once a selection is made, it is saved to the module's project configuration. Dropdowns allow for a user to type field names in the event they know what they are looking for and do not want to scroll through the often extensive list of available fields.
+
+ROCS includes an autosave feature which is triggered when critical actions are performed. Critical actions are defined as when a user updates selected forms through the "Manage Forms" interface, and when fields are mapped using the dropdowns.

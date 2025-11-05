@@ -129,7 +129,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             return; // Modal already exists
         }
 
-        // --- 1. Create Modal Elements ---
         const modalOverlay = document.createElement('div');
         modalOverlay.className = 'modal-overlay';
         modalOverlay.id = 'comparison-modal';
@@ -137,19 +136,19 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         const modalBox = document.createElement('div');
         modalBox.className = 'modal-box';
 
-        //console.log(modalOverlay, modalBox)
-
         return { modalOverlay, modalBox };
     }
 
-    function comparisonModal(redcap, oncore, onSelectCallback) {
-        const built = buildModal();
-        if (!built) return; // The modal already exists
+    function comparisonModal(redcap, oncore, index, count, onSelectCallback) {
+        // Replace any existing modal before opening a new one
+        const existing = document.querySelector('.modal-overlay');
+        if (existing) existing.remove();
 
+        const built = buildModal();
         const { modalOverlay, modalBox } = built;
 
         let modalContent = `
-            <h2>Record Comparison</h2>
+            <h2>Record Comparison (${index} of ${count})</h2>
             <p>Please select the record with the most accurate information.</p>
             <div class="modal-comparison-grid">
                 <div class="modal-column">
@@ -221,7 +220,11 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         modalOverlay.appendChild(modalBox);
         document.body.appendChild(modalOverlay);
 
-        const closeModal = () => document.body.removeChild(modalOverlay);
+            const closeModal = () => {
+                if (modalOverlay && modalOverlay.parentNode) {
+                    modalOverlay.parentNode.removeChild(modalOverlay);
+                }
+            };
 
         document.getElementById('select_redcap').addEventListener('click', () => {
             onSelectCallback(redcap);
@@ -283,12 +286,9 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         modalOverlay.appendChild(modalBox);
         document.body.appendChild(modalOverlay);
 
-        // Close modal helper
-        const closeModal = (shouldCheckpoint = false) => {
-            document.body.removeChild(modalOverlay);
-            
-            if (shouldCheckpoint) {
-                checkpoint();
+        const closeModal = () => {
+            if (modalOverlay && modalOverlay.parentNode) {
+                modalOverlay.parentNode.removeChild(modalOverlay);
             }
         };
 
@@ -482,9 +482,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             mapping[instrument] = instrumentMapping;
         });
 
-        //console.log('Final mapping:', mapping);
-        //console.log('Displayed instruments:', displayed);
-
         // Send to server - include the displayed array
         $.ajax({
             url: "<?= $module->getUrl('scripts/save_mappings.php') ?>",
@@ -579,6 +576,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
     function getFromOnCoreWithIRBNo(record) {
         const protocol_number = record['irb_number']; // protocol #
+        const originals = {}; // keep a copy of original value of conflicting records
+        const updates = {}; // copy of selected conflicting values
         $.ajax({
             url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocol_number}`,
             method: "GET",
@@ -586,43 +585,178 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             success: function (data) {
                 let dict = data[0];
                 console.log('OnCore data fetched for protocol:', dict);
-                // Move through our mappings and synchronize the data
+                
+                // Collect all mismatches first
+                const comparisons = [];
+
                 Object.entries(mappings).forEach(([form, fields]) => {
                     Object.entries(fields).forEach(([redcapField, oncoreField]) => {
-                        if (oncoreField === '') {
-                            // do nothing
-                        }
-                        else if (record[redcapField] != dict[oncoreField]) {
-                            console.log('Values match for field:', redcapField);
-                            
-                            let redcap = {
-                                'record_id': record['record_id'],
-                                'irb_number': record['irb_number'],
-                                'eirb_number': record['eirb_number'],
-                                [redcapField]: record[redcapField] // item of concern
-                            };
+                        if (oncoreField === '') return;
 
-                            let oncore = {
-                                'record_id': record['record_id'],
-                                'irb_number': record['irb_number'],
-                                'eirb_number': record['eirb_number'],
-                                [redcapField]: dict[oncoreField] // item of concern
-                            };
-                            
-                            // Run comparison modal on the two objects above
-                            comparisonModal(redcap, oncore, handleRecordSelection);
-                        }
-                        else {
-                            // insert value from OnCore into record if REDCap has no value, but the field is mapped
-                            record[redcapField] = dict[oncoreField];
+                        const redcapValue = record[redcapField];
+                        const oncoreValue = dict[oncoreField];
+
+                        originals[redcapField] = record[redcapField];
+
+                        if (redcapValue != oncoreValue) {
+                            comparisons.push({ redcapField, oncoreField, redcapValue, oncoreValue });
+                        } else if (!redcapValue && oncoreValue) {
+                            record[redcapField] = oncoreValue;
                         }
                     });
                 });
-                // save the record somehow
+                
+                // Sequentially show comparison modals
+                const showNextComparison = (index = 0) => {
+                    if (index >= comparisons.length) {
+                        // Get user confirmation before saving
+                        confirmSaveModal(originals, updates, () => {
+                            console.log('User confirmed save.');
+                            saveRecord(record); // Call your save function here
+                        }, () => {
+                            console.log('User canceled save.');
+                        });
+                        return;
+                    }
+
+                    const { redcapField, oncoreField, redcapValue, oncoreValue } = comparisons[index];
+
+                    const redcapObj = {
+                        record_id: record['record_id'],
+                        irb_number: record['irb_number'],
+                        eirb_number: record['eirb_number'],
+                        [redcapField]: redcapValue
+                    };
+
+                    const oncoreObj = {
+                        record_id: record['record_id'],
+                        irb_number: record['irb_number'],
+                        eirb_number: record['eirb_number'],
+                        [redcapField]: oncoreValue
+                    };
+
+                    comparisonModal(redcapObj, oncoreObj, (index+1), comparisons.length, (selected) => {
+                        // merge selected choice into record
+                        updates[redcapField] = selected[redcapField];
+                        Object.assign(record, selected);
+
+                        // then show next modal
+                        showNextComparison(index + 1);
+                    });
+                };
+
+                // Start the sequence if we have mismatches
+                if (comparisons.length > 0) {
+                    showNextComparison();
+                } else {
+                    console.log('No mismatches found.');
+                }
+
                 console.log('Record mapped with OnCore data: ', record);
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching protocols:', error, xhr.responseText);
+            }
+        });
+        
+        return record;
+    }
+
+    function confirmSaveModal(original, updated, onConfirm, onCancel) {
+        console.log('original:', original);
+        console.log('updated:', updated);
+        // Remove any existing modal first
+        const existing = document.querySelector('.modal-overlay');
+        if (existing) existing.remove();
+
+        const built = buildModal();
+        const { modalOverlay, modalBox } = built;
+
+        let modalContent = `
+            <h2>Confirm Save</h2>
+            <p>
+                You have finished reviewing all mismatches.<br>
+                Saving will overwrite existing REDCap data where you chose OnCore values.
+            </p>
+            <table class="dataTable cell-border no-footer" style="margin-top: 1rem; width:100%;">
+                <thead>
+                    <tr>
+                        <th>Field</th>
+                        <th>Original Value</th>
+                        <th>New Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        // Build diff rows
+        Object.keys(updated).forEach((key, i) => {
+            const originalValue = original[key] ?? 'N/A';
+            const newValue = updated[key] ?? 'N/A';
+
+            if (originalValue !== newValue) {
+                const rowClass = i % 2 === 0 ? 'even' : 'odd';
+                modalContent += `
+                    <tr class="${rowClass}">
+                        <td>${key}</td>
+                        <td>${originalValue}</td>
+                        <td class="highlight">${newValue}</td>
+                    </tr>
+                `;
+            }
+        });
+
+        modalContent += `
+                </tbody>
+            </table>
+            <div style="display:flex; justify-content:center; gap:1rem; margin-top:1.5rem;">
+                <button id="confirm_save" style="background-color:#28a745; color:white; padding:10px 20px; border:none; border-radius:6px;">Save Choices</button>
+                <button id="cancel_save" style="background-color:#dc3545; color:white; padding:10px 20px; border:none; border-radius:6px;">Cancel</button>
+            </div>
+        `;
+
+        modalBox.innerHTML = modalContent;
+        modalOverlay.appendChild(modalBox);
+        document.body.appendChild(modalOverlay);
+
+        const closeModal = () => {
+            if (modalOverlay && modalOverlay.parentNode) {
+                modalOverlay.parentNode.removeChild(modalOverlay);
+            }
+        };
+
+        document.getElementById('confirm_save').addEventListener('click', () => {
+            closeModal();
+            if (onConfirm) onConfirm();
+        });
+
+        document.getElementById('cancel_save').addEventListener('click', () => {
+            closeModal();
+            if (onCancel) onCancel();
+        });
+
+        modalOverlay.addEventListener('click', (e) => {
+            if (e.target === modalOverlay) closeModal();
+        });
+    }
+
+    function saveRecord(rec) {
+        const wrapped = {};
+        wrapped[rec.record_id] = rec; // wrap by record_id
+
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/save_record.php") ?>',
+            method: "POST",
+            data: { 
+                record: JSON.stringify(wrapped), // wrap in array for REDCap saveData format
+                redcap_csrf_token: <?= json_encode($csrf) ?>
+            },
+            success: function (data) {
+                alert('Record was saved successfully.');
+                console.log('Record saved successfully:', data);
+            },
+            error: function (xhr, status, error) {
+                console.error('Error saving record:', error, xhr.responseText);
             }
         });
     }
