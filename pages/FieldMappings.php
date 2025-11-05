@@ -152,75 +152,70 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             <h2>Record Comparison</h2>
             <p>Please select the record with the most accurate information.</p>
             <div class="modal-comparison-grid">
-                <div class="modal-record-header">REDCap</div>
-                <table class="dataTable cell-border no-footer" id='redcap_table'>
-                    <thead>
-                        <tr>
-                            <th>Field Name</th>
-                            <th>Value</th>
-                        </tr>
-                    </thead>
-
+                <div class="modal-column">
+                    <div class="modal-record-header">REDCap</div>
+                    <table class="myDataTable dataTable cell-border no-footer" id="redcap_table">
+                        <thead>
+                            <tr>
+                                <th>Field Name</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
         `;
 
-        const redcap_table = document.getElementById('redcap_table');
-        const oncore_table = document.getElementById('oncore_table');
-        
-        // Build REDCap table rows
-        let i = 0; // set up an incrementer to alternate row style
-        Object.keys(redcap).forEach(key => {
+        Object.keys(redcap).forEach((key, i) => {
             const redcapValue = redcap[key] ?? 'N/A';
             const oncoreValue = oncore[key] ?? 'N/A';
             const highlightClass = redcapValue !== oncoreValue ? 'highlight' : '';
 
             modalContent += `
-                <tr class="${i % 2 !== 0 ? 'odd' : 'even'}">
-                    <td class="${highlightClass}">${key}</td>
-                    <td class="${highlightClass}">${redcapValue}</td>
+                <tr class="${i % 2 !== 0 ? 'odd' : 'even'} ${highlightClass}">
+                    <td>${key}</td>
+                    <td>${redcapValue}</td>
                 </tr>
             `;
-            
-            i = i + 1;
         });
 
         modalContent += `
-                </table>
-                <div class="modal-record-header">OnCore</div>
-                <table class="dataTable cell-border no-footer" id="oncore_table">
-                    <thead>
-                        <tr>
-                            <th>Field Name</th>
-                            <th>Value</th>
-                        </tr>
-                    </thead>
+                        </tbody>
+                    </table>
+                    <button id="select_redcap">Save REDCap Data</button>
+                </div>
+
+                <div class="modal-column">
+                    <div class="modal-record-header">OnCore</div>
+                    <table class="myDataTable dataTable cell-border no-footer" id="oncore_table">
+                        <thead>
+                            <tr>
+                                <th>Field Name</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
         `;
 
-        // Build OnCore table rows
-        i = 0; // Redefine i as 0 so that our color incrementation should match from both sides
-        Object.keys(oncore).forEach(key => {
+        Object.keys(oncore).forEach((key, i) => {
             const redcapValue = redcap[key] ?? 'N/A';
             const oncoreValue = oncore[key] ?? 'N/A';
             const highlightClass = redcapValue !== oncoreValue ? 'highlight' : '';
 
             modalContent += `
-                <tr class="${i % 2 !== 0 ? 'odd' : 'even'}">
-                    <td class="${highlightClass}">${key}</td>
-                    <td class="${highlightClass}">${redcapValue}</td>
+                <tr class="${i % 2 !== 0 ? 'odd' : 'even'} ${highlightClass}">
+                    <td>${key}</td>
+                    <td>${oncoreValue}</td>
                 </tr>
             `;
-
-            i = i + 1;
         });
 
         modalContent += `
-                </table>
-            </div>
-            <div class="modal-actions">
-                <button id="select_redcap">Save REDCap Data</button>
-                <button id="select_oncore">Save OnCore Data</button>
-                <button id="close_btn" class="close-button">Cancel</button>
-            </div>
+                        </tbody>
+                    </table>
+                    <button id="select_oncore">Save OnCore Data</button>
+                </div>
+            </div> <!-- end modal-comparison-grid -->
         `;
+
 
         modalBox.innerHTML = modalContent;
         modalOverlay.appendChild(modalBox);
@@ -238,7 +233,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             closeModal();
         });
 
-        document.getElementById('close_btn').addEventListener('click', closeModal);
+        //document.getElementById('close_btn').addEventListener('click', closeModal);
         modalOverlay.addEventListener('click', (event) => {
             if (event.target === modalOverlay) closeModal();
         });
@@ -610,8 +605,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                             let oncore = {
                                 'record_id': record['record_id'],
                                 'irb_number': record['irb_number'],
-                                'eirb_number': dict['eIRB'],
-                                [oncoreField]: dict[oncoreField] // item of concern
+                                'eirb_number': record['eirb_number'],
+                                [redcapField]: dict[oncoreField] // item of concern
                             };
                             
                             // Run comparison modal on the two objects above
