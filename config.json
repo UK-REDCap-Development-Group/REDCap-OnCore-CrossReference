@@ -49,7 +49,12 @@
         },
         {
             "key": "field-mappings",
-            "name": "OnCore Field Mappings DO NOT EDIT",
+            "name": "DO NOT EDIT! OnCore Field Mappings",
+            "type": "json"
+        },
+        {
+            "key": "to-adjudicate",
+            "name": "DO NOT EDIT! Records Requiring Adjudication",
             "type": "json"
         }
     ],
