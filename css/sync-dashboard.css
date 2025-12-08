@@ -1,0 +1,45 @@
+.btn-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;                 /* space between the two buttons */
+    width: 100% !important;              /* full width of the table cell */
+    padding: 4px 0;
+}
+
+.fix-btn,
+.ignore-btn {
+    width: 100% !important;
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin: 0 10% 0 10%;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.fix-btn {
+    background: #4caf50;
+    color: white;
+    text-decoration: none;
+}
+
+.fix-btn:hover {
+    background: #43a047;
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: white;
+}
+
+.ignore-btn {
+    background: #e57373;
+    color: white;
+    text-decoration: none;
+}
+
+.ignore-btn:hover {
+    background: #d32f2f;
+    transform: translateY(-1px);
+    text-decoration: none;
+    color: white;
+}

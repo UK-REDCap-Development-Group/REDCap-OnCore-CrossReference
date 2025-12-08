@@ -1,5 +1,4 @@
 <?php
-
 namespace UKModules\ROCS;
 
 /** @var \ExternalModules\AbstractExternalModule $module */
@@ -12,9 +11,9 @@ if (empty($pid)) {
 }
 
 $module->setProjectId($pid);
-$mismatches = $module->getProjectSetting('to-adjudicate') ?? [];
+$comparisons = $module->getProjectSetting('to-adjudicate') ?? [];
 
 echo json_encode([
     'status' => 'success',
-    'data' => $mismatches,
+    'data' => $comparisons,
 ]);

@@ -1,22 +1,21 @@
 <?php
-
 namespace UKModules\ROCS;
 
 /** @var \ExternalModules\AbstractExternalModule $module */
 
-$pid = (int)$_POST['pid'];
-$mismatches = json_decode($_POST['mappings'], true);
+$pid = (int) $_POST['pid'];
+$comparisons = json_decode($_POST['comparisons'], true);
 
-if (empty($pid) || !is_array($mismatches)) {
+if (empty($pid) || !is_array($comparisons)) {
     http_response_code(400);
-    exit(json_encode(['error' => 'Invalid input']));
+    exit(json_encode(['error' => 'Invalid input', 'pid' => $pid, 'comparisons' => $comparisons]));
 }
 
 $module->setProjectId($pid);
-$module->setProjectSetting('to-adjudicate', $mismatches);
+$module->setProjectSetting('to-adjudicate', $comparisons);
 
 echo json_encode([
     'status' => 'success',
-    'message' => 'All mappings saved successfully',
-    'data' => $mismatches,
+    'message' => 'All comparisons saved successfully',
+    'data' => $comparisons,
 ]);

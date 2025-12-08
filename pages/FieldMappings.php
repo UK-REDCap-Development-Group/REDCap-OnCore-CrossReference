@@ -9,6 +9,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 ?>
 
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
+<link rel="stylesheet" href="<?= $module->getUrl('css/modals.css') ?>">
+
 
 <script>
     // Get max_input from php.ini into a js workable variable
@@ -586,10 +588,16 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 let dict = data[0];
                 console.log('OnCore data fetched for protocol:', dict);
                 
-                // Collect all mismatches first
-                const comparisons = [];
+                // Collect all mismatches first.
+                const mismatched_records = []; // stores completed comparisons
 
                 Object.entries(mappings).forEach(([form, fields]) => {
+                    let comparisons = {}; // initialized every time we loop a record
+
+                    // basic demographics of project for display on frontend
+                    comparisons.record_id = record.record_id;
+                    comparisons.full_title = record.full_title;
+
                     Object.entries(fields).forEach(([redcapField, oncoreField]) => {
                         if (oncoreField === '') return;
 
@@ -599,14 +607,39 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         originals[redcapField] = record[redcapField];
 
                         if (redcapValue != oncoreValue) {
-                            comparisons.push({ redcapField, oncoreField, redcapValue, oncoreValue });
-                        } else if (!redcapValue && oncoreValue) {
-                            record[redcapField] = oncoreValue;
+                            comparisons[redcapField] = {'REDCapValue': redcapValue, 'OnCoreValue': oncoreValue}
+                        }
+                        else if (!redcapValue && oncoreValue) {
+                            comparisons[redcapField] = oncoreValue;
                         }
                     });
+
+                    // If the only keys we have are the record_id and full_title, we don't need this sent to adjudication
+                    if (Object.keys(comparisons).length > 2) {
+                        mismatched_records.push(comparisons);
+                    }
+                });
+
+                console.log(mismatched_records);
+
+                $.ajax({
+                    url: '<?= $module->getUrl("scripts/track_adjudicates.php") ?>',
+                    method: "POST",
+                    data: {
+                        pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                        comparisons: JSON.stringify(mismatched_records),
+                        redcap_csrf_token: <?= json_encode($csrf) ?>
+                    },
+                    success: function (data) {
+                        alert('Adjudicates were saved successfully.');
+                        console.log('Adjudicates saved successfully:', data);
+                    },
+                    error: function (xhr, status, error) {
+                        console.error('Error saving record:', error, xhr.responseText);
+                    }
                 });
                 
-                // Sequentially show comparison modals
+                /*// Sequentially show comparison modals
                 const showNextComparison = (index = 0) => {
                     if (index >= comparisons.length) {
                         // Get user confirmation before saving
@@ -650,7 +683,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     showNextComparison();
                 } else {
                     console.log('No mismatches found.');
-                }
+                }*/
 
                 console.log('Record mapped with OnCore data: ', record);
             },
