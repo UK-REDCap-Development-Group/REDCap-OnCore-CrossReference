@@ -75,7 +75,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 <div class="d-flex container" style="flex-direction: column;">
     <!-- Manage and sync buttons -->
     <div class="row selection-btns">
-        <div class="col-md-6">
+        <div class="col-md-3">
             <a id="manage-forms-btn">
                 <div class="center-home-sects">
                     <span><i class="fa fa-plus"></i></span><br>
@@ -83,11 +83,27 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 </div>
             </a>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-3">
             <a id="sync-btn" class="center-home-sects">
                 <div class="center-home-sects">
                     <span><i class="fas fa-arrows-rotate"></i></span><br>
                     <h5>Sync with OnCore</h5>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a id="upload-btn" class="center-home-sects">
+                <div class="center-home-sects">
+                    <span><i class="fas fa-upload"></i></span><br>
+                    <h5>Upload Config</h5>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a id="export-btn" class="center-home-sects">
+                <div class="center-home-sects">
+                    <span><i class="fas fa-file-export"></i></span><br>
+                    <h5>Export Config</h5>
                 </div>
             </a>
         </div>
@@ -103,7 +119,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     <!-- Manage and sync buttons -->
     <div class="row selection-btns">
-        <div class="col-md-6">
+        <div class="col-md-3">
             <a id="manage-forms-btn">
                 <div class="center-home-sects">
                     <span><i class="fa fa-plus"></i></span><br>
@@ -111,11 +127,27 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 </div>
             </a>
         </div>
-        <div class="col-md-6">
+        <div class="col-md-3">
             <a id="sync-btn" class="center-home-sects">
                 <div class="center-home-sects">
                     <span><i class="fas fa-arrows-rotate"></i></span><br>
                     <h5>Sync with OnCore</h5>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a id="upload-btn" class="center-home-sects">
+                <div class="center-home-sects">
+                    <span><i class="fas fa-upload"></i></span><br>
+                    <h5>Upload Config</h5>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a id="export-btn" class="center-home-sects">
+                <div class="center-home-sects">
+                    <span><i class="fas fa-file-export"></i></span><br>
+                    <h5>Export Config</h5>
                 </div>
             </a>
         </div>
@@ -338,6 +370,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     <tr>
                         <th>${instruments[selectedForm]} Fields</th>
                         <th>OnCore Field</th>
+                        <th>Include Unmapped in Adjudication</th>
                     </tr>`;
                 table.appendChild(header);
 
@@ -350,12 +383,16 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     row.className = i % 2 === 0 ? 'even' : 'odd';
 
                     const selectId = `${selectedForm}_${redcapField}`;
+                    const checkId = `display_${redcapField}`;
                     row.innerHTML = `
                         <td style="width:50%"><label for="${selectId}">${redcapField}</label></td>
                         <td style="width:50%">
                             <select name="${redcapField}" id="${selectId}">
                                 <option value="">None</option>
                             </select>
+                        </td>
+                        <td>
+                            <input id='${checkId}' type='checkbox'>
                         </td>
                     `;
 
@@ -378,6 +415,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             });
 
             closeModal(true);
+            checkpoint();
         });
 
         // Close modal on Cancel or background click
@@ -573,6 +611,89 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         alert(`You chose the record with id: ${selectedRecord.record_id}`);
     }
 
+    /* Table view for comparing source to REDCap data */
+    function showComparisonTable(comparisons, record) {
+        // Replace any existing modal before opening a new one
+        const existing = document.querySelector('.modal-overlay');
+        if (existing) existing.remove();
+
+        const built = buildModal();
+        const { modalOverlay, modalBox } = built;
+
+        let modalContent = `
+            <p>Please select the record with the most accurate information.</p>
+            <div class="modal-comparison-grid">
+                <div class="modal-column">
+                    <table class="myDataTable dataTable cell-border no-footer" id="redcap_table">
+                        <thead>
+                            <tr>
+                                <th>Field Name</th>
+                                <th>REDCap</th>
+                                <th>OnCore</th>
+                            </tr>
+                        </thead>
+                        <tbody style='overflow-y: auto;'>
+                            <tr>
+                                <td>ccts_record</td>
+                                <td>${record.ccts_record}</td>
+                                <td>N/A</td>
+                            </tr>
+                            <tr>
+                                <td>full_title</td>
+                                <td>${record.full_title}</td>
+                                <td>N/A</td>
+                            </tr>
+        `;
+
+        comparisons.forEach((set, i) => {
+            console.log(set);
+            const field = set['field_name']
+            const redcapValue = set['redcap'] ?? 'N/A';
+            const oncoreValue = set['oncore'] ?? 'N/A';
+            const highlightClass = redcapValue !== oncoreValue ? 'highlight' : '';
+
+            modalContent += `
+                <tr class="${i % 2 !== 0 ? 'odd' : 'even'} ${highlightClass}">
+                    <td>${field}</td>
+                    <td id='keep'>${redcapValue}</td>
+                    <td id='keep'>${oncoreValue}</td>
+                </tr>
+            `;
+        });
+
+        modalContent += `
+                        </tbody>
+                    </table>
+                    <button id="select_redcap">Save REDCap Data</button>
+                </div>
+        `;
+
+        modalBox.innerHTML = modalContent;
+        modalOverlay.appendChild(modalBox);
+        document.body.appendChild(modalOverlay);
+
+        const closeModal = () => {
+            if (modalOverlay && modalOverlay.parentNode) {
+                modalOverlay.parentNode.removeChild(modalOverlay);
+            }
+        };
+
+        /*document.getElementById('select_redcap').addEventListener('click', () => {
+            //onSelectCallback(redcap);
+            closeModal();
+        });
+
+        document.getElementById('select_oncore').addEventListener('click', () => {
+            //onSelectCallback(oncore);
+            closeModal();
+        });*/
+
+        //document.getElementById('close_btn').addEventListener('click', closeModal);
+        modalOverlay.addEventListener('click', (event) => {
+            if (event.target === modalOverlay) closeModal();
+        });
+    }
+
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
     function getFromOnCoreWithIRBNo(record) {
         const protocol_number = record['irb_number']; // protocol #
@@ -598,15 +719,23 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
                         originals[redcapField] = record[redcapField];
 
-                        if (redcapValue != oncoreValue) {
-                            comparisons.push({ redcapField, oncoreField, redcapValue, oncoreValue });
-                        } else if (!redcapValue && oncoreValue) {
+                        console.log('originals', originals);
+                        console.log('record', record);
+
+                        if (redcapValue !== oncoreValue) {
+                            comparisons.push({
+                                'field_name': redcapField,
+                                'redcap': redcapValue,
+                                'oncore': oncoreValue });
+                        } /*else if (!redcapValue && oncoreValue) {
                             record[redcapField] = oncoreValue;
-                        }
+                        }*/
                     });
                 });
-                
-                // Sequentially show comparison modals
+
+                showComparisonTable(comparisons, record);
+
+                /*// Sequentially show comparison modals
                 const showNextComparison = (index = 0) => {
                     if (index >= comparisons.length) {
                         // Get user confirmation before saving
@@ -650,7 +779,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     showNextComparison();
                 } else {
                     console.log('No mismatches found.');
-                }
+                }*/
 
                 console.log('Record mapped with OnCore data: ', record);
             },
@@ -801,6 +930,14 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             //modalTest(redcap_record, oncore_record, handleRecordSelection);
             //let oncore = getFromOnCore(11, protocolNo); // manual test using Saltzman record
             getFromREDCap('eirb_number', eIRBno);
+        });
+
+        document.getElementById('upload-btn').addEventListener('click', () => {
+            // import a specifically formatted config for upload in another project
+        });
+
+        document.getElementById('export-btn').addEventListener('click', () => {
+            // export a properly formatted config for upload in another project
         });
 
         document.getElementById('manage-forms-btn').addEventListener('click', () => {
