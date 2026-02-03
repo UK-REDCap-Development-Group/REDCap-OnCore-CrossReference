@@ -21,6 +21,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 </script>
 
 <script>
+    // Function gets called to build the tables which showcase the forms
     function buildTables(keys) {
         const inst_list = document.getElementById('instruments_list');
 
