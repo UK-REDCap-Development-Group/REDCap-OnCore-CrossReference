@@ -685,6 +685,15 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             const oncoreValue = set.oncore.value ?? 'N/A';
             console.log(set);
 
+            if (!set.unmapped) {
+                if (set.redcap.selected) {
+                    selectedRecords[field] = redcapValue;
+                }
+                else if (set.oncore.selected) {
+                    selectedRecords[field] = oncoreValue;
+                }
+            }
+
             modalContent += `
                 <tr data-field="${field}">
                     <td>${field}</td>
@@ -715,10 +724,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
             const row = cell.closest('tr');
             const field = row.dataset.field;
-            const source = cell.dataset.source;
-
             // store selection
-            selectedRecords[field] = source;
+            selectedRecords[field] = cell.dataset.source;
 
             // remove selection ONLY in this row
             row.querySelectorAll('.selectable-cell')
@@ -761,6 +768,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
     function getFromOnCoreWithIRBNo(record) {
         const protocol_number = record['irb_number']; // protocol #
+        console.log('protocol num' + protocol_number);
 
         $.ajax({
             url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocol_number}`,
@@ -967,12 +975,83 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             getFromREDCap('eirb_number', eIRBno);
         });
 
-        document.getElementById('upload-btn').addEventListener('click', () => {
-            // import a specifically formatted config for upload in another project
+        document.getElementById('upload-btn').addEventListener('click', async () => {
+            // Remove any existing modal first
+            const existing = document.querySelector('.modal-overlay');
+            if (existing) existing.remove();
+
+            const built = buildModal();
+            const { modalOverlay, modalBox } = built;
+
+            let modalContent = `
+                <h2>WARNING: Uploading a mapping will overwrite previously saved mappings.</h2>
+                <h3>We strongly suggest exporting your current mapping first as a backup.</h3>
+                <div>
+                    <p>Select a valid configuration file.</p>
+                    <input type="file" id="jsonFile" accept=".json">
+                </div>
+                <div style="display:flex; justify-content:center; gap:1rem; margin-top:1.5rem;">
+                    <button id="confirm_upload" style="background-color:#28a745; color:white; padding:10px 20px; border:none; border-radius:6px;">Save Choices</button>
+                    <button id="cancel_upload" style="background-color:#dc3545; color:white; padding:10px 20px; border:none; border-radius:6px;">Cancel</button>
+                </div>
+            `
+
+            modalBox.innerHTML = modalContent;
+            modalOverlay.appendChild(modalBox);
+            document.body.appendChild(modalOverlay);
+
+            const closeModal = () => {
+                if (modalOverlay && modalOverlay.parentNode) {
+                    modalOverlay.parentNode.removeChild(modalOverlay);
+                }
+            };
+
+            document.getElementById('confirm_upload').addEventListener('click', async () => {
+                const fileInput = document.getElementById("jsonFile");
+
+                if (!fileInput || !fileInput.files.length) {
+                    alert("Please select a configuration file first.");
+                    return;
+                }
+
+                const file = fileInput.files[0];
+
+                try {
+                    const text = await file.text();
+                    const data = JSON.parse(text);
+                    rebuild_from_mappings(instruments, dictionary, data);
+                    closeModal();
+                } catch (err) {
+                    console.error(err);
+                    alert("Invalid JSON file.");
+                }
+            });
+
+            document.getElementById('cancel_upload').addEventListener('click', () => {
+                closeModal();
+            });
+
+            modalOverlay.addEventListener('click', (e) => {
+                if (e.target === modalOverlay) closeModal();
+            });
         });
 
         document.getElementById('export-btn').addEventListener('click', () => {
             // export a properly formatted config for upload in another project
+            const jsonString = JSON.stringify(mappings, null, 2);
+
+            // Create file blob
+            const blob = new Blob([jsonString], { type: "application/json" });
+
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+
+            a.href = url;
+            a.download = `${project_title}_${project_id}_mapping_config.json`;
+            a.click();
+
+            URL.revokeObjectURL(url);
         });
 
         document.getElementById('manage-forms-btn').addEventListener('click', () => {
