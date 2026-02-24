@@ -172,109 +172,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         return { modalOverlay, modalBox };
     }
 
-    function comparisonModal(redcap, oncore, index, count, onSelectCallback) {
-        // Replace any existing modal before opening a new one
-        const existing = document.querySelector('.modal-overlay');
-        if (existing) existing.remove();
-
-        const built = buildModal();
-        const { modalOverlay, modalBox } = built;
-
-        let modalContent = `
-            <h2>Record Comparison (${index} of ${count})</h2>
-            <p>Please select the record with the most accurate information.</p>
-            <div class="modal-comparison-grid">
-                <div class="modal-column">
-                    <div class="modal-record-header">REDCap</div>
-                    <table class="myDataTable dataTable cell-border no-footer" id="redcap_table">
-                        <thead>
-                            <tr>
-                                <th>Field Name</th>
-                                <th>Value</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-        `;
-
-        Object.keys(redcap).forEach((key, i) => {
-            const redcapValue = redcap[key] ?? 'N/A';
-            const oncoreValue = oncore[key] ?? 'N/A';
-            const highlightClass = redcapValue !== oncoreValue ? 'highlight' : '';
-
-            modalContent += `
-                <tr class="${i % 2 !== 0 ? 'odd' : 'even'} ${highlightClass}">
-                    <td>${key}</td>
-                    <td>${redcapValue}</td>
-                </tr>
-            `;
-        });
-
-        modalContent += `
-                        </tbody>
-                    </table>
-                    <button id="select_redcap">Save REDCap Data</button>
-                </div>
-
-                <div class="modal-column">
-                    <div class="modal-record-header">OnCore</div>
-                    <table class="myDataTable dataTable cell-border no-footer" id="oncore_table">
-                        <thead>
-                            <tr>
-                                <th>Field Name</th>
-                                <th>Value</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-        `;
-
-        Object.keys(oncore).forEach((key, i) => {
-            const redcapValue = redcap[key] ?? 'N/A';
-            const oncoreValue = oncore[key] ?? 'N/A';
-            const highlightClass = redcapValue !== oncoreValue ? 'highlight' : '';
-
-            modalContent += `
-                <tr class="${i % 2 !== 0 ? 'odd' : 'even'} ${highlightClass}">
-                    <td>${key}</td>
-                    <td>${oncoreValue}</td>
-                </tr>
-            `;
-        });
-
-        modalContent += `
-                        </tbody>
-                    </table>
-                    <button id="select_oncore">Save OnCore Data</button>
-                </div>
-            </div> <!-- end modal-comparison-grid -->
-        `;
-
-
-        modalBox.innerHTML = modalContent;
-        modalOverlay.appendChild(modalBox);
-        document.body.appendChild(modalOverlay);
-
-            const closeModal = () => {
-                if (modalOverlay && modalOverlay.parentNode) {
-                    modalOverlay.parentNode.removeChild(modalOverlay);
-                }
-            };
-
-        document.getElementById('select_redcap').addEventListener('click', () => {
-            onSelectCallback(redcap);
-            closeModal();
-        });
-
-        document.getElementById('select_oncore').addEventListener('click', () => {
-            onSelectCallback(oncore);
-            closeModal();
-        });
-
-        //document.getElementById('close_btn').addEventListener('click', closeModal);
-        modalOverlay.addEventListener('click', (event) => {
-            if (event.target === modalOverlay) closeModal();
-        });
-    }
-
     // Creates a modal that lets you select which forms you want to sync and ignore the ones you don't want
     function manageForms(instruments, displayed) {
         const built = buildModal();
@@ -741,7 +638,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             }
         };
 
-        //document.getElementById('close_btn').addEventListener('click', closeModal);
         modalOverlay.addEventListener('click', (event) => {
             if (event.target === modalOverlay) closeModal();
         });
