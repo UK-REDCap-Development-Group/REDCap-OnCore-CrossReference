@@ -504,7 +504,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         option.textContent = field;
 
                         // mark selected if it matches the saved mapping
-                        if (mappedFields[redcapField] === field) option.selected = true;
+                        if (mappedFields[redcapField].mapping === field) option.selected = true;
 
                         selectEl.appendChild(option);
                     });
@@ -657,8 +657,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     /* Table view for comparing source to REDCap data */
     function showComparisonTable(comparisons, record) {
-        console.log(comparisons, record);
-
         // Replace any existing modal before opening a new one
         const existing = document.querySelector('.modal-overlay');
         if (existing) existing.remove();
@@ -685,14 +683,19 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             const field = set.field_name;
             const redcapValue = set.redcap.value ?? 'N/A';
             const oncoreValue = set.oncore.value ?? 'N/A';
+            console.log(set);
 
             modalContent += `
                 <tr data-field="${field}">
                     <td>${field}</td>
-                    <td class="selectable-cell" data-source="redcap">${redcapValue}</td>
-                    <td class="selectable-cell" data-source="oncore">${oncoreValue}</td>
+                    ${!set.unmapped
+                                ? `<td class="selectable-cell ${set.redcap.selected ? 'selected' : ''}" data-source="redcap">${redcapValue}</td>
+                           <td class="selectable-cell ${set.oncore.selected ? 'selected' : ''}" data-source="oncore">${oncoreValue}</td>`
+                                : `<td>${redcapValue}</td>
+                           <td>${oncoreValue}</td>`
+                            }
                 </tr>
-            `;
+                `;
         });
 
         modalContent += `
@@ -758,8 +761,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
     function getFromOnCoreWithIRBNo(record) {
         const protocol_number = record['irb_number']; // protocol #
-        const originals = {}; // keep a copy of original value of conflicting records
-        const updates = {}; // copy of selected conflicting values
+
         $.ajax({
             url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocol_number}`,
             method: "GET",
@@ -772,80 +774,47 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 const comparisons = [];
 
                 Object.entries(mappings).forEach(([form, fields]) => {
-                    Object.entries(fields).forEach(([redcapField, oncoreField]) => {
-                        if (oncoreField === '') return;
+                    Object.entries(fields).forEach(([redcapField, mappingObj]) => {
+                        // mappingObj: { mapping: "OnCoreFieldName", include_unmapped: true/false }
+                        const includeUnmapped = mappingObj.include_unmapped;
+                        const oncoreFieldName = mappingObj.mapping;
 
-                        const redcapValue = record[redcapField];
-                        const oncoreValue = dict[oncoreField];
+                        // skip if mapping is empty and we don't want it included
+                        if (!oncoreFieldName && !includeUnmapped) return;
 
-                        originals[redcapField] = record[redcapField];
+                        const redcapValue = record[redcapField] || '';
+                        const oncoreValue = dict[oncoreFieldName] || '';
 
-                        console.log('originals', originals);
-                        console.log('record', record);
-
-                        if ((redcapValue !== oncoreValue) || (redcapValue === oncoreValue)) {
+                        if (includeUnmapped) {
                             comparisons.push({
                                 'field_name': redcapField,
-                                'redcap': {'value': redcapValue, 'selected': true},
-                                'oncore': {'value': oncoreValue, 'selected': false},
+                                'redcap': { 'value': redcapValue, 'selected': false },
+                                'oncore': { 'value': '', 'selected': false },
+                                'unmapped': true
                             });
-                        } else if (!redcapValue && oncoreValue) {
+                            return;
+                        }
+
+                        if (!redcapValue && oncoreValue) {
                             comparisons.push({
                                 'field_name': redcapField,
-                                'redcap': {'value': redcapValue, 'selected': false},
-                                'oncore': {'value': oncoreValue, 'selected': true},
-                            })
+                                'redcap': { 'value': redcapValue, 'selected': false },
+                                'oncore': { 'value': oncoreValue, 'selected': true },
+                                'unmapped': false
+                            });
+                        }
+                        else {
+                            comparisons.push({
+                                'field_name': redcapField,
+                                'redcap': { 'value': redcapValue, 'selected': true },
+                                'oncore': { 'value': oncoreValue, 'selected': false },
+                                'unmapped': false
+                            });
                         }
                     });
                 });
 
                 showComparisonTable(comparisons, record);
-
-                /*// Sequentially show comparison modals
-                const showNextComparison = (index = 0) => {
-                    if (index >= comparisons.length) {
-                        // Get user confirmation before saving
-                        confirmSaveModal(originals, updates, () => {
-                            console.log('User confirmed save.');
-                            saveRecord(record); // Call your save function here
-                        }, () => {
-                            console.log('User canceled save.');
-                        });
-                        return;
-                    }
-
-                    const { redcapField, oncoreField, redcapValue, oncoreValue } = comparisons[index];
-
-                    const redcapObj = {
-                        record_id: record['record_id'],
-                        irb_number: record['irb_number'],
-                        eirb_number: record['eirb_number'],
-                        [redcapField]: redcapValue
-                    };
-
-                    const oncoreObj = {
-                        record_id: record['record_id'],
-                        irb_number: record['irb_number'],
-                        eirb_number: record['eirb_number'],
-                        [redcapField]: oncoreValue
-                    };
-
-                    comparisonModal(redcapObj, oncoreObj, (index+1), comparisons.length, (selected) => {
-                        // merge selected choice into record
-                        updates[redcapField] = selected[redcapField];
-                        Object.assign(record, selected);
-
-                        // then show next modal
-                        showNextComparison(index + 1);
-                    });
-                };
-
-                // Start the sequence if we have mismatches
-                if (comparisons.length > 0) {
-                    showNextComparison();
-                } else {
-                    console.log('No mismatches found.');
-                }*/
 
                 console.log('Record mapped with OnCore data: ', record);
             },
@@ -1024,5 +993,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             }
         });
     });
+
 </script>
 
