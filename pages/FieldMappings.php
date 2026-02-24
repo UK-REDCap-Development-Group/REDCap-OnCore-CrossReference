@@ -504,7 +504,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         option.textContent = field;
 
                         // mark selected if it matches the saved mapping
-                        if (mappedFields[redcapField] === field) option.selected = true;
+                        if (mappedFields[redcapField].mapping === field) option.selected = true;
 
                         selectEl.appendChild(option);
                     });
@@ -600,7 +600,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
                 mappings = result.data || {};
                 const savedDisplayed = result.displayed || []; // <-- Load the saved displayed list
-
+                console.log(mappings)
                 displayed.length = 0;
                 // Use the saved displayed list instead of mapping keys
                 savedDisplayed.forEach(instrumentKey => {
