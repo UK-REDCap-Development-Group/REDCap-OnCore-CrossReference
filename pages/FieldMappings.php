@@ -275,8 +275,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
-    let selectedRecords = {};
-
     // Creates a modal that lets you select which forms you want to sync and ignore the ones you don't want
     function manageForms(instruments, displayed) {
         const built = buildModal();
@@ -395,10 +393,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                             </select>
                         </td>
                         <td>
-                        <td style="width:15%; text-align:center;">
-                            <input type="checkbox"
-                                   class="include-unmapped"
-                                   data-field="${redcapField}">
+                            <input id='${checkId}' type='checkbox'>
                         </td>
                     `;
 
@@ -436,14 +431,11 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     function rebuild_from_mappings(instruments, dictionary, existingMappings) {
-        console.log(instruments, dictionary, existingMappings);
         const container = document.getElementById('instruments_list');
         if (!container) return;
 
         // Create a fragment to build the tables in memory
         const fragment = document.createDocumentFragment();
-
-        console.log(displayed);
 
         // Only build tables for instruments in the displayed array
         displayed.forEach(instrumentKey => {
@@ -461,11 +453,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             table.className = "dataTable cell-border no-footer";
             
             const header = document.createElement('thead');
-            header.innerHTML = `<tr>
-                                    <th>${instrumentLabel} Fields</th>
-                                    <th>OnCore Field</th>
-                                    <th>Include Unmapped in Adjudication</th>
-                                 </tr>`;
+            header.innerHTML = `<tr><th>${instrumentLabel} Fields</th><th>OnCore Field</th></tr>`;
             table.appendChild(header);
 
             const tbody = document.createElement('tbody');
@@ -478,18 +466,11 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
                 const selectId = `${instrumentKey}_${redcapField}`;
                 row.innerHTML = `
-                    <td style="width:45%">
-                        <label for="${selectId}">${redcapField}</label>
-                    </td>
-                    <td style="width:40%">
+                    <td style="width:50%"><label for="${selectId}">${redcapField}</label></td>
+                    <td style="width:50%">
                         <select name="${redcapField}" id="${selectId}">
                             <option value="">None</option>
                         </select>
-                    </td>
-                    <td style="width:15%; text-align:center;">
-                        <input type="checkbox"
-                               class="include-unmapped"
-                               data-field="${redcapField}">
                     </td>
                 `;
 
@@ -509,16 +490,10 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         selectEl.appendChild(option);
                     });
                 }
-                const checkbox = row.querySelector('.include-unmapped');
-                if (checkbox) {
-                    checkbox.checked = mappedFields[redcapField].include_unmapped;
-                }
-
-                fragment.appendChild(table);
                 i++;
             });
 
-
+            fragment.appendChild(table);
         });
 
         // Clear the container (removes the loader) and append all tables
@@ -527,38 +502,20 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     function checkpoint() {
-        console.log('checkpoint')
         const mapping = {};
 
-        document.querySelectorAll('#instruments_list > table').forEach(table => {
+        document.querySelectorAll('table').forEach(table => {
             const instrument = table.id;
-            if (!instrument) return;
-
             const instrumentMapping = {};
-
+            
+            if (!instrument) {
+                return;
+            }
+            
             table.querySelectorAll('select').forEach(select => {
-
                 const redcapField = select.name;
                 const selectedValue = select.value;
-
-                const row = select.closest('tr');
-                const checkbox = row?.querySelector('.include-unmapped');
-
-                const includeUnmapped = checkbox
-                    ? checkbox.checked
-                    : false;
-
-                console.log(
-                    instrument,
-                    redcapField,
-                    selectedValue,
-                    includeUnmapped
-                );
-
-                instrumentMapping[redcapField] = {
-                    mapping: selectedValue,
-                    include_unmapped: includeUnmapped
-                };
+                instrumentMapping[redcapField] = selectedValue;
             });
 
             mapping[instrument] = instrumentMapping;
@@ -657,8 +614,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     /* Table view for comparing source to REDCap data */
     function showComparisonTable(comparisons, record) {
-        console.log(comparisons, record);
-
         // Replace any existing modal before opening a new one
         const existing = document.querySelector('.modal-overlay');
         if (existing) existing.remove();
@@ -679,18 +634,30 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                             </tr>
                         </thead>
                         <tbody style='overflow-y: auto;'>
+                            <tr>
+                                <td>ccts_record</td>
+                                <td>${record.ccts_record}</td>
+                                <td>N/A</td>
+                            </tr>
+                            <tr>
+                                <td>full_title</td>
+                                <td>${record.full_title}</td>
+                                <td>N/A</td>
+                            </tr>
         `;
 
         comparisons.forEach((set, i) => {
-            const field = set.field_name;
-            const redcapValue = set.redcap.value ?? 'N/A';
-            const oncoreValue = set.oncore.value ?? 'N/A';
+            console.log(set);
+            const field = set['field_name']
+            const redcapValue = set['redcap'] ?? 'N/A';
+            const oncoreValue = set['oncore'] ?? 'N/A';
+            const highlightClass = redcapValue !== oncoreValue ? 'highlight' : '';
 
             modalContent += `
-                <tr data-field="${field}">
+                <tr class="${i % 2 !== 0 ? 'odd' : 'even'} ${highlightClass}">
                     <td>${field}</td>
-                    <td class="selectable-cell" data-source="redcap">${redcapValue}</td>
-                    <td class="selectable-cell" data-source="oncore">${oncoreValue}</td>
+                    <td id='keep'>${redcapValue}</td>
+                    <td id='keep'>${oncoreValue}</td>
                 </tr>
             `;
         });
@@ -698,7 +665,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         modalContent += `
                         </tbody>
                     </table>
-                    <button id="select_redcap">Save Selected Data to REDCap</button>
+                    <button id="select_redcap">Save REDCap Data</button>
                 </div>
         `;
 
@@ -706,53 +673,26 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         modalOverlay.appendChild(modalBox);
         document.body.appendChild(modalOverlay);
 
-        modalBox.addEventListener('click', (e) => {
-            const cell = e.target.closest('.selectable-cell');
-            if (!cell) return;
-
-            const row = cell.closest('tr');
-            const field = row.dataset.field;
-            const source = cell.dataset.source;
-
-            // store selection
-            selectedRecords[field] = source;
-
-            // remove selection ONLY in this row
-            row.querySelectorAll('.selectable-cell')
-                .forEach(td => td.classList.remove('selected'));
-
-            // highlight chosen cell
-            cell.classList.add('selected');
-
-            console.log(selectedRecords);
-        });
-
         const closeModal = () => {
             if (modalOverlay && modalOverlay.parentNode) {
                 modalOverlay.parentNode.removeChild(modalOverlay);
             }
         };
 
+        /*document.getElementById('select_redcap').addEventListener('click', () => {
+            //onSelectCallback(redcap);
+            closeModal();
+        });
+
+        document.getElementById('select_oncore').addEventListener('click', () => {
+            //onSelectCallback(oncore);
+            closeModal();
+        });*/
+
         //document.getElementById('close_btn').addEventListener('click', closeModal);
         modalOverlay.addEventListener('click', (event) => {
             if (event.target === modalOverlay) closeModal();
         });
-
-        document.getElementById('select_redcap')
-            .addEventListener('click', () => {
-
-                console.log("Final selections:", selectedRecords);
-
-                // TODO: send to backend
-                // fetch('/save', { method:'POST', body: JSON.stringify(selectedRecords) })
-
-                closeModal();
-            });
-    }
-
-    // Function tracks choices and makes them available in an object for saving later
-    function selectRecord(value) {
-        console.log(value);
     }
 
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
@@ -783,19 +723,14 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         console.log('originals', originals);
                         console.log('record', record);
 
-                        if ((redcapValue !== oncoreValue) || (redcapValue === oncoreValue)) {
+                        if (redcapValue !== oncoreValue) {
                             comparisons.push({
                                 'field_name': redcapField,
-                                'redcap': {'value': redcapValue, 'selected': true},
-                                'oncore': {'value': oncoreValue, 'selected': false},
-                            });
-                        } else if (!redcapValue && oncoreValue) {
-                            comparisons.push({
-                                'field_name': redcapField,
-                                'redcap': {'value': redcapValue, 'selected': false},
-                                'oncore': {'value': oncoreValue, 'selected': true},
-                            })
-                        }
+                                'redcap': redcapValue,
+                                'oncore': oncoreValue });
+                        } /*else if (!redcapValue && oncoreValue) {
+                            record[redcapField] = oncoreValue;
+                        }*/
                     });
                 });
 
@@ -1014,12 +949,11 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             manageForms(instruments, displayed);
         });
 
+        //document.getElementById('save-map-btn').addEventListener('click', checkpoint);
+
         // When a user changes a field mapping dropdown
         document.addEventListener('change', function(event) {
             if (event.target.matches('#instruments_list select')) {
-                checkpoint();
-            }
-            if (event.target.matches('#instruments_list input' )) {
                 checkpoint();
             }
         });

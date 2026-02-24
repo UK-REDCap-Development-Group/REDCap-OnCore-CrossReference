@@ -1,26 +1,3 @@
-.selectable-cell {
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-/* hover effect */
-.selectable-cell:hover {
-    background-color: #eef5ff;
-}
-
-/* selected state */
-.selectable-cell.selected {
-    background-color: #2b7cff;
-    color: white;
-    font-weight: bold;
-}
-
-/* optional: table polish */
-.modal-comparison-grid table td,
-.modal-comparison-grid table th {
-    padding: 8px 12px;
-}
-
 /* Modal Overlay: Dark background behind the popup */
 .modal-overlay {
     position: fixed;
