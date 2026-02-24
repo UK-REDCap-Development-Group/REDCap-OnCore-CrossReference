@@ -984,10 +984,10 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             const { modalOverlay, modalBox } = built;
 
             let modalContent = `
-                <h2>WARNING: Uploading a mapping will overwrite previously saved mappings.</h2>
-                <h3>We strongly suggest exporting your current mapping first as a backup.</h3>
+                <h1 class="warning">WARNING!</h1>
+                <h2 class="disclaimer">Uploading a mapping <strong>will overwrite previously saved mappings.</strong></h2>
+                <h2 class="disclaimer">We strongly suggest exporting your current mapping first as a backup.</h2>
                 <div>
-                    <p>Select a valid configuration file.</p>
                     <input type="file" id="jsonFile" accept=".json">
                 </div>
                 <div style="display:flex; justify-content:center; gap:1rem; margin-top:1.5rem;">
