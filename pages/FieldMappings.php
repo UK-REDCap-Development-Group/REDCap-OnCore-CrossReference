@@ -275,8 +275,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
-    let selectedRecords = {};
-
     // Creates a modal that lets you select which forms you want to sync and ignore the ones you don't want
     function manageForms(instruments, displayed) {
         const built = buildModal();
@@ -657,6 +655,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     /* Table view for comparing source to REDCap data */
     function showComparisonTable(comparisons, record) {
+        let selectedValues = record;
+
         // Replace any existing modal before opening a new one
         const existing = document.querySelector('.modal-overlay');
         if (existing) existing.remove();
@@ -687,10 +687,10 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
             if (!set.unmapped) {
                 if (set.redcap.selected) {
-                    selectedRecords[field] = redcapValue;
+                    selectedValues[field] = redcapValue;
                 }
                 else if (set.oncore.selected) {
-                    selectedRecords[field] = oncoreValue;
+                    selectedValues[field] = oncoreValue;
                 }
             }
 
@@ -698,8 +698,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 <tr data-field="${field}">
                     <td>${field}</td>
                     ${!set.unmapped
-                                ? `<td class="selectable-cell ${set.redcap.selected ? 'selected' : ''}" data-source="redcap">${redcapValue}</td>
-                           <td class="selectable-cell ${set.oncore.selected ? 'selected' : ''}" data-source="oncore">${oncoreValue}</td>`
+                                ? `<td class="selectable-cell ${set.redcap.selected ? 'selected' : ''}" data-source="${redcapValue}">${redcapValue}</td>
+                           <td class="selectable-cell ${set.oncore.selected ? 'selected' : ''}" data-source="${oncoreValue}">${oncoreValue}</td>`
                                 : `<td>${redcapValue}</td>
                            <td>${oncoreValue}</td>`
                             }
@@ -710,7 +710,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         modalContent += `
                         </tbody>
                     </table>
-                    <button id="select_redcap">Save Selected Data to REDCap</button>
+                    <button id="overwrite">Save Selected Data to REDCap</button>
                 </div>
         `;
 
@@ -725,7 +725,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             const row = cell.closest('tr');
             const field = row.dataset.field;
             // store selection
-            selectedRecords[field] = cell.dataset.source;
+            selectedValues[field] = cell.dataset.source;
 
             // remove selection ONLY in this row
             row.querySelectorAll('.selectable-cell')
@@ -733,8 +733,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
             // highlight chosen cell
             cell.classList.add('selected');
-
-            console.log(selectedRecords);
         });
 
         const closeModal = () => {
@@ -748,13 +746,25 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             if (event.target === modalOverlay) closeModal();
         });
 
-        document.getElementById('select_redcap')
-            .addEventListener('click', () => {
+        document.getElementById('overwrite')
+            .addEventListener('click', async () => {
+                console.log(selectedValues)
 
-                console.log("Final selections:", selectedRecords);
-
-                // TODO: send to backend
-                // fetch('/save', { method:'POST', body: JSON.stringify(selectedRecords) })
+                $.ajax({
+                    url: "<?= $module->getUrl('scripts/save_record.php'); ?>",
+                    method: "POST",
+                    data: {
+                        pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                        redcap_csrf_token: <?= json_encode($csrf) ?>,
+                        record: JSON.stringify([selectedValues]) // REDCap expects array
+                    },
+                    success: function (result) {
+                        console.log("Checkpoint saved:", result);
+                    },
+                    error: function (xhr, status, error) {
+                        console.error("Error in checkpoint:", error, xhr.responseText);
+                    }
+                });
 
                 closeModal();
             });
@@ -912,27 +922,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
-    function saveRecord(rec) {
-        const wrapped = {};
-        wrapped[rec.record_id] = rec; // wrap by record_id
-
-        $.ajax({
-            url: '<?= $module->getUrl("scripts/save_record.php") ?>',
-            method: "POST",
-            data: { 
-                record: JSON.stringify(wrapped), // wrap in array for REDCap saveData format
-                redcap_csrf_token: <?= json_encode($csrf) ?>
-            },
-            success: function (data) {
-                alert('Record was saved successfully.');
-                console.log('Record saved successfully:', data);
-            },
-            error: function (xhr, status, error) {
-                console.error('Error saving record:', error, xhr.responseText);
-            }
-        });
-    }
-
     function getFromREDCap(field, value) {
         console.log('pressed');
         $.ajax({
@@ -1020,6 +1009,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     const text = await file.text();
                     const data = JSON.parse(text);
                     rebuild_from_mappings(instruments, dictionary, data);
+                    checkpoint(); // save it after
                     closeModal();
                 } catch (err) {
                     console.error(err);

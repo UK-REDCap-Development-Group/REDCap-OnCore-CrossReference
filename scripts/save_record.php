@@ -22,7 +22,7 @@ $result = REDCap::saveData([
     'type' => 'flat', // currently built for flat data only
     'dataLogging' => true,
     'performAutoCalc' => true,
-    'commitData' => true // if set to false, it does a test run and 
+    'commitData' => true // if set to false, it does a test run and
                          // returns what would have been saved.
 ]);
 
