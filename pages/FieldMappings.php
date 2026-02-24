@@ -746,28 +746,32 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             if (event.target === modalOverlay) closeModal();
         });
 
-        document.getElementById('overwrite')
-            .addEventListener('click', async () => {
-                console.log(selectedValues)
+        document.getElementById('overwrite').addEventListener('click', async () => {
+            const ok = confirm("WARNING: This action will overwrite existing REDCap data. Please double-check your selections.\n\nClick OK to proceed.");
 
-                $.ajax({
-                    url: "<?= $module->getUrl('scripts/save_record.php'); ?>",
-                    method: "POST",
-                    data: {
-                        pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
-                        redcap_csrf_token: <?= json_encode($csrf) ?>,
-                        record: JSON.stringify([selectedValues]) // REDCap expects array
-                    },
-                    success: function (result) {
-                        console.log("Checkpoint saved:", result);
-                    },
-                    error: function (xhr, status, error) {
-                        console.error("Error in checkpoint:", error, xhr.responseText);
-                    }
-                });
+            if (!ok) {
+                // User cancelled
+                return;
+            }
 
-                closeModal();
+            $.ajax({
+                url: "<?= $module->getUrl('scripts/save_record.php'); ?>",
+                method: "POST",
+                data: {
+                    pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                    redcap_csrf_token: <?= json_encode($csrf) ?>,
+                    record: JSON.stringify([selectedValues]) // REDCap expects array
+                },
+                success: function (result) {
+                    console.log("Checkpoint saved:", result);
+                },
+                error: function (xhr, status, error) {
+                    console.error("Error in checkpoint:", error, xhr.responseText);
+                }
             });
+
+            closeModal();
+        });
     }
 
     // Function tracks choices and makes them available in an object for saving later
