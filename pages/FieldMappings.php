@@ -269,7 +269,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         <th>${instruments[selectedForm]} Fields</th>
                         <th>REDCap Field Label</th>
                         <th>OnCore Field</th>
-                        <th>Include Unmapped in Adjudication</th>
+                        <th>Include, But Don't Adjudicate</th>
                     </tr>`;
                 table.appendChild(header);
 
@@ -368,7 +368,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                                     <th>${instrumentLabel} Fields</th>
                                     <th>REDCap Field Label</th>
                                     <th>OnCore Field</th>
-                                    <th>Include Unmapped in Adjudication</th>
+                                    <th>Include, But Don't Adjudicate</th>
                                  </tr>`;
             table.appendChild(header);
 
@@ -598,7 +598,12 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                             <th>OnCore Data</th>
                         </tr>
                     </thead>
-                    <tbody style='overflow-y: auto;'>`
+                    <tbody style='overflow-y: auto;'>
+                    <td>record_id</td>
+                    <td>Record ID</td>
+                    <td>${record.record_id}</td>
+                    <td>N/A</td>
+`
             comparisons[form].forEach((set, i) => {
                 console.log(set)
                 const field = set.field_name;
@@ -854,22 +859,37 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
-    function getFromREDCap(field, value, dictionary) {
+    function getFromREDCap(field, value, dictionary, all=false) {
         console.log('pressed');
-        $.ajax({
-            url: '<?= $module->getUrl("scripts/get_records.php") ?>',
-            data: { 
-                'field': field,
-                'value': value
-            },
-            success: function (data) {
-                let record = data[0];
-                getFromOnCoreWithIRBNo(record, dictionary);
-            },
-            error: function (xhr, status, error) {
-                console.error('Error fetching REDCap record:', error, xhr.responseText);
-            }
-        });
+        if (all) {
+            $.ajax({
+                url: '<?= $module->getUrl("scripts/get_all_records.php") ?>',
+                data: {
+                },
+                success: function (data) {
+                    console.log(data);
+                },
+                error: function (xhr, status, error) {
+                    console.error('Error fetching REDCap record:', error, xhr.responseText);
+                }
+            });
+        }
+        else {
+            $.ajax({
+                url: '<?= $module->getUrl("scripts/get_records.php") ?>',
+                data: {
+                    'field': field,
+                    'value': value
+                },
+                success: function (data) {
+                    let record = data[0];
+                    getFromOnCoreWithIRBNo(record, dictionary);
+                },
+                error: function (xhr, status, error) {
+                    console.error('Error fetching REDCap record:', error, xhr.responseText);
+                }
+            });
+        }
     }
 
     // Pull all records with a valid protocol number and check if they need to be adjudicated.

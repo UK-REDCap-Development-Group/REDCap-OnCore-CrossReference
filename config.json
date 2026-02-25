@@ -13,6 +13,12 @@
     "system-settings": [],
     "project-settings": [
         {
+            "key": "identifier-select",
+            "name": "Please select which field should be used to find records in OnCore",
+            "type": "field-list",
+            "repeatable": false
+        },
+        {
             "key": "token-url-desc",
             "name": "Please input the url for the OnCore OAuth Token API source you wish to use below. The URL should look something like this:<br> https://oncore.forteresearchapps.com/forte-platform-web/api/oauth/token.",
             "type": "descriptive"
