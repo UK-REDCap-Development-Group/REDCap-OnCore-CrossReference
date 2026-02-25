@@ -256,6 +256,10 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 if (index !== -1) displayed.splice(index, 1);
             }
 
+            if (selected.length > 0) {
+                document.getElementById('instruments_list').innerHTML='';
+            }
+
             // Handle additions
             toAdd.forEach(selectedForm => {
                 displayed.push(selectedForm);
@@ -500,6 +504,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             method: "GET",
             dataType: "json",
             success: function (result) {
+                console.log(result);
                 if (result.status !== 'success') {
                     console.error('Failed to load mappings:', result.error || 'Unknown error');
                     const loader = document.getElementById('forms-loader');
@@ -509,18 +514,30 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     return;
                 }
 
-                mappings = result.data || {};
-                const savedDisplayed = result.displayed || []; // <-- Load the saved displayed list
+                if (!result.data) {
+                    let list = document.getElementById('instruments_list');
+                    list.innerHTML = `<h2>You currently have not selected any Forms for mapping.</h2>
+                                      <h2>Select the "Manage Forms" option above to begin mapping your first Form.</h2>`;
+                }
+                else if (mappings.length === 0) {
+                    let list = document.getElementById('instruments_list');
+                    list.innerHTML = `<h2>You currently have not selected any Forms for mapping.</h2>
+                                      <h2>Select the "Manage Forms" option above to begin mapping your first Form.</h2>`;
+                }
+                else {
+                    mappings = result.data || {};
+                    const savedDisplayed = result.displayed || []; // <-- Load the saved displayed list
 
-                displayed.length = 0;
-                // Use the saved displayed list instead of mapping keys
-                savedDisplayed.forEach(instrumentKey => {
-                    if (instruments[instrumentKey]) {
-                        displayed.push(instrumentKey);
-                    }
-                });
+                    displayed.length = 0;
+                    // Use the saved displayed list instead of mapping keys
+                    savedDisplayed.forEach(instrumentKey => {
+                        if (instruments[instrumentKey]) {
+                            displayed.push(instrumentKey);
+                        }
+                    });
 
-                rebuild_from_mappings(instruments, dictionary, mappings);
+                    rebuild_from_mappings(instruments, dictionary, mappings);
+                }
             },
             error: function (xhr, status, error) {
                 console.error('Error loading saved mappings:', error, xhr.responseText);
