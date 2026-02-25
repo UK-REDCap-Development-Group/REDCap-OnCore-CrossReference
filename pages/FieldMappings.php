@@ -267,6 +267,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 header.innerHTML = `
                     <tr>
                         <th>${instruments[selectedForm]} Fields</th>
+                        <th>REDCap Field Label</th>
                         <th>OnCore Field</th>
                         <th>Include Unmapped in Adjudication</th>
                     </tr>`;
@@ -274,7 +275,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
                 const tbody = document.createElement('tbody');
                 table.appendChild(tbody);
-
+                console.log('dictionary',dictionary);
+                console.log('instruments',instruments);
                 let i = 0;
                 Object.keys(dictionary[selectedForm]).forEach(redcapField => {
                     const row = document.createElement('tr');
@@ -284,6 +286,13 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     const checkId = `display_${redcapField}`;
                     row.innerHTML = `
                         <td style="width:50%"><label for="${selectId}">${redcapField}</label></td>
+                        <td>
+                            ${
+                                dictionary[selectedForm][redcapField].field_label.length > 50
+                                    ? dictionary[selectedForm][redcapField].field_label.slice(0, 50) + '…'
+                                    : dictionary[selectedForm][redcapField].field_label
+                            }
+                        </td>
                         <td style="width:50%">
                             <select name="${redcapField}" id="${selectId}">
                                 <option value="">None</option>
@@ -358,6 +367,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             const header = document.createElement('thead');
             header.innerHTML = `<tr>
                                     <th>${instrumentLabel} Fields</th>
+                                    <th>REDCap Field Label</th>
                                     <th>OnCore Field</th>
                                     <th>Include Unmapped in Adjudication</th>
                                  </tr>`;
@@ -376,6 +386,13 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     <td style="width:45%">
                         <label for="${selectId}">${redcapField}</label>
                     </td>
+                        <td>
+                            ${
+                                dictionary[instrumentKey][redcapField].field_label.length > 50
+                                    ? dictionary[instrumentKey][redcapField].field_label.slice(0, 50) + '…'
+                                    : dictionary[instrumentKey][redcapField].field_label
+                            }
+                        </td>
                     <td style="width:40%">
                         <select name="${redcapField}" id="${selectId}">
                             <option value="">None</option>
