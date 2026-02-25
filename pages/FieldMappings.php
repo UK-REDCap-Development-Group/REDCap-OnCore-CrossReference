@@ -275,8 +275,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
                 const tbody = document.createElement('tbody');
                 table.appendChild(tbody);
-                console.log('dictionary',dictionary);
-                console.log('instruments',instruments);
+
                 let i = 0;
                 Object.keys(dictionary[selectedForm]).forEach(redcapField => {
                     const row = document.createElement('tr');
@@ -569,6 +568,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     /* Table view for comparing source to REDCap data */
     function showComparisonTable(comparisons, record) {
+        console.log(record);
         let selectedValues = record;
 
         // Replace any existing modal before opening a new one
@@ -582,51 +582,59 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             <p>Please select the record with the most accurate information.</p>
             <div class="modal-comparison-grid">
                 <div class="modal-column">
-                    <table class="myDataTable dataTable cell-border no-footer" id="redcap_table">
-                        <thead>
-                            <tr>
-                                <th>Field Name</th>
-                                <th>REDCap</th>
-                                <th>OnCore</th>
-                            </tr>
-                        </thead>
-                        <tbody style='overflow-y: auto;'>
+
         `;
 
-        comparisons.forEach((set, i) => {
-            const field = set.field_name;
-            const redcapValue = set.redcap.value ?? 'N/A';
-            const oncoreValue = set.oncore.value ?? 'N/A';
-            console.log(set);
-
-            if (!set.unmapped) {
-                if (set.redcap.selected) {
-                    selectedValues[field] = redcapValue;
-                }
-                else if (set.oncore.selected) {
-                    selectedValues[field] = oncoreValue;
-                }
-            }
-
+        Object.keys(comparisons).forEach(form => {
+            console.log(form);
             modalContent += `
+                <h2>${instruments[form]}</h2>
+                <table class="myDataTable dataTable cell-border no-footer" id="redcap_table">
+                    <thead>
+                        <tr>
+                            <th>Field Name</th>
+                            <th>Field Label</th>
+                            <th>REDCap Data</th>
+                            <th>OnCore Data</th>
+                        </tr>
+                    </thead>
+                    <tbody style='overflow-y: auto;'>`
+            comparisons[form].forEach((set, i) => {
+                console.log(set)
+                const field = set.field_name;
+                const redcapValue = set.redcap.value ?? 'N/A';
+                const oncoreValue = set.oncore.value ?? 'N/A';
+                console.log(set);
+
+                if (!set.unmapped) {
+                    if (set.redcap.selected) {
+                        selectedValues[field] = redcapValue;
+                    }
+                    else if (set.oncore.selected) {
+                        selectedValues[field] = oncoreValue;
+                    }
+                }
+
+                modalContent += `
                 <tr data-field="${field}">
                     <td>${field}</td>
+                    <td>${dictionary[form][field].field_label}</td>
                     ${!set.unmapped
-                                ? `<td class="selectable-cell ${set.redcap.selected ? 'selected' : ''}" data-source="${redcapValue}">${redcapValue}</td>
+                    ? `<td class="selectable-cell ${set.redcap.selected ? 'selected' : ''}" data-source="${redcapValue}">${redcapValue}</td>
                            <td class="selectable-cell ${set.oncore.selected ? 'selected' : ''}" data-source="${oncoreValue}">${oncoreValue}</td>`
-                                : `<td>${redcapValue}</td>
+                    : `<td>${redcapValue}</td>
                            <td>${oncoreValue}</td>`
-                            }
+                }
                 </tr>
                 `;
-        });
-
-        modalContent += `
+            });
+            modalContent += `
                         </tbody>
                     </table>
                     <button id="overwrite">Save Selected Data to REDCap</button>
                 </div>
-        `;
+            `;
+        })
 
         modalBox.innerHTML = modalContent;
         modalOverlay.appendChild(modalBox);
@@ -693,7 +701,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
-    function getFromOnCoreWithIRBNo(record) {
+    function getFromOnCoreWithIRBNo(record, dictionary) {
         const protocol_number = record['irb_number']; // protocol #
         console.log('protocol num' + protocol_number);
 
@@ -707,8 +715,10 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 
                 // Collect all mismatches first
                 const comparisons = [];
+                const experimental = {};
 
                 Object.entries(mappings).forEach(([form, fields]) => {
+                    let form_data = [];
                     Object.entries(fields).forEach(([redcapField, mappingObj]) => {
                         // mappingObj: { mapping: "OnCoreFieldName", include_unmapped: true/false }
                         const includeUnmapped = mappingObj.include_unmapped;
@@ -721,35 +731,45 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         const oncoreValue = dict[oncoreFieldName] || '';
 
                         if (includeUnmapped) {
-                            comparisons.push({
+                            let obj = {
                                 'field_name': redcapField,
                                 'redcap': { 'value': redcapValue, 'selected': false },
                                 'oncore': { 'value': '', 'selected': false },
                                 'unmapped': true
-                            });
+                            };
+                            comparisons.push(obj);
+                            form_data.push(obj);
                             return;
                         }
 
                         if (!redcapValue && oncoreValue) {
-                            comparisons.push({
+                            let obj = {
                                 'field_name': redcapField,
                                 'redcap': { 'value': redcapValue, 'selected': false },
                                 'oncore': { 'value': oncoreValue, 'selected': true },
                                 'unmapped': false
-                            });
+                            };
+                            comparisons.push(obj);
+                            form_data.push(obj);
                         }
                         else {
-                            comparisons.push({
+                            let obj = {
                                 'field_name': redcapField,
                                 'redcap': { 'value': redcapValue, 'selected': true },
                                 'oncore': { 'value': oncoreValue, 'selected': false },
                                 'unmapped': false
-                            });
+                            };
+                            comparisons.push(obj);
+                            form_data.push(obj);
                         }
                     });
+                    let obj = {};
+                    obj[form] = form_data;
+                    experimental[form] = form_data;
                 });
 
-                showComparisonTable(comparisons, record);
+                console.log('New experimental structure:',experimental);
+                showComparisonTable(experimental, record, dictionary);
 
                 console.log('Record mapped with OnCore data: ', record);
             },
@@ -839,7 +859,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
-    function getFromREDCap(field, value) {
+    function getFromREDCap(field, value, dictionary) {
         console.log('pressed');
         $.ajax({
             url: '<?= $module->getUrl("scripts/get_records.php") ?>',
@@ -849,7 +869,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             },
             success: function (data) {
                 let record = data[0];
-                getFromOnCoreWithIRBNo(record);
+                getFromOnCoreWithIRBNo(record, dictionary);
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
@@ -857,6 +877,14 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
+    // Pull all records with a valid protocol number and check if they need to be adjudicated.
+    function fullSync(records) {
+        // Save records needing adjudication to logs and allow a user to adjudicate them later.
+
+
+    }
+
+    // Load the saved checkpoint when the page is initialized
     document.addEventListener('DOMContentLoaded', () => {
         $.ajax({
             url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocolNo}`,
@@ -878,7 +906,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         document.getElementById('sync-btn').addEventListener('click', () => {
             //modalTest(redcap_record, oncore_record, handleRecordSelection);
             //let oncore = getFromOnCore(11, protocolNo); // manual test using Saltzman record
-            getFromREDCap('eirb_number', eIRBno);
+            getFromREDCap('eirb_number', eIRBno, dictionary);
         });
 
         document.getElementById('upload-btn').addEventListener('click', async () => {
