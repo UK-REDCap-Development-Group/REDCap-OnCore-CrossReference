@@ -695,11 +695,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
-    // Function tracks choices and makes them available in an object for saving later
-    function selectRecord(value) {
-        console.log(value);
-    }
-
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
     function getFromOnCoreWithIRBNo(record, dictionary) {
         const protocol_number = record['irb_number']; // protocol #
@@ -880,6 +875,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     // Pull all records with a valid protocol number and check if they need to be adjudicated.
     function fullSync(records) {
         // Save records needing adjudication to logs and allow a user to adjudicate them later.
+        // Ensure that you only pull records which don't have the checkmark on "ignore"
+
 
 
     }
