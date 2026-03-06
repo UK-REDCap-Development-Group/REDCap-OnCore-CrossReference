@@ -14,6 +14,7 @@ $instruments = REDCap::getInstrumentNames();
                 <div class="center-home-sects">
                     <span><i class="fas fa-arrows-rotate"></i></span><br>
                     <h5>Sync with OnCore</h5>
+                    <div id="records_list"></div>
                 </div>
             </a>
         </div>
@@ -23,6 +24,9 @@ $instruments = REDCap::getInstrumentNames();
 </div>
 
 <script>
+    // TODO: fnc that builds records_list table from the flagged records saved in the config
+    // TODO: fnc that loops the checker code from FieldMappings.php
+    // TODO: fnc that fires when a record is selected to allow a user to adjudicate
     function getFromREDCap(field, value) {
         console.log('pressed');
         $.ajax({

@@ -16,6 +16,7 @@ if (!defined('PAGE')) define('PAGE', 'ajax');
 header('Content-Type: application/json');
 
 $action = $_GET['action'] ?? ''; // get only the action parameter
+$special = $_GET['special'] ?? ''; // only used in cases where format changes
 
 $params = $_GET; // get every parameter from the url
 
@@ -32,7 +33,56 @@ $queryString = http_build_query($params); // rebuild parameters into something w
 try {
     switch ($action) {
         case 'protocols':
+            // GET
+            // Query string should be: protocolId=
             $response = $module->proxyPost("/protocols?$queryString");
+            echo $response;
+            break;
+
+        case 'protocolSponsors':
+            // GET
+            // Query string should be: protocolId= or sponsorProtocolNo=
+            $response = $module->proxyPost("/protocolSponsors?$queryString");
+            echo $response;
+            break;
+
+        case 'protocolStaff':
+            // GET
+            // Query string should be: protocolId=
+            $response = $module->proxyPost("/protocolStaff?$queryString");
+            echo $response;
+            break;
+
+        case 'protocolManagementDetails':
+            // GET
+            // Query string requires irbNo
+            $response = $module->proxyPost("/protocolManagementDetails/".$special);
+            echo $response;
+            break;
+
+        case 'protocolPrmcReviews':
+            // GET
+            $response = $module->proxyPost("/protocolPrmcReviews?$queryString");
+            echo $queryString;
+            echo $response;
+            break;
+
+        case 'protocolTasks':
+            // GET
+            $response = $module->proxyPost("/protocolTasks?$queryString");
+            echo $response;
+            break;
+
+        case 'protocolInd':
+            // GET
+            $response = $module->proxyPost("/protocolInd?$queryString");
+            echo $response;
+            break;
+
+        case 'contactCredentials':
+            // GET
+            // query string should be contactId=
+            $response = $module->proxyPost("/contactCredentials?$queryString");
             echo $response;
             break;
 

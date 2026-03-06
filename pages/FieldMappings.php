@@ -18,6 +18,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     const protocolNo = '15-0927-F1V'; // sample that was arbitrarily set, need a way around this
     const eIRBno = '46000'; // sample that was arbitrarily set, need a way around this
     let mappings = false;
+    const contactId = ''; // not sure where I might find this
 </script>
 
 <script>
@@ -719,6 +720,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
     function getFromOnCoreWithIRBNo(record, dictionary) {
+        // TODO: Come back and cleanup the references to comparisons, we're using that model moving forward
         const protocol_number = record['irb_number']; // protocol #
         console.log('protocol num' + protocol_number);
 
@@ -742,12 +744,23 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         const oncoreFieldName = mappingObj.mapping;
 
                         // skip if mapping is empty and we don't want it included
-                        if (!oncoreFieldName && !includeUnmapped) return;
+                        if (!oncoreFieldName) return;
 
                         const redcapValue = record[redcapField] || '';
                         const oncoreValue = dict[oncoreFieldName] || '';
 
-                        if (includeUnmapped) {
+                        if (includeUnmapped && oncoreValue) {
+                            let obj = {
+                                'field_name': redcapField,
+                                'redcap': { 'value': redcapValue, 'selected': false },
+                                'oncore': { 'value': oncoreValue, 'selected': false },
+                                'unmapped': true
+                            };
+                            comparisons.push(obj);
+                            form_data.push(obj);
+                            return;
+                        }
+                        else if (includeUnmapped && !oncoreValue) {
                             let obj = {
                                 'field_name': redcapField,
                                 'redcap': { 'value': redcapValue, 'selected': false },
@@ -763,6 +776,16 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                             let obj = {
                                 'field_name': redcapField,
                                 'redcap': { 'value': redcapValue, 'selected': false },
+                                'oncore': { 'value': oncoreValue, 'selected': true },
+                                'unmapped': false
+                            };
+                            comparisons.push(obj);
+                            form_data.push(obj);
+                        }
+                        else if (redcapValue === oncoreValue) {
+                            let obj = {
+                                'field_name': redcapField,
+                                'redcap': { 'value': redcapValue, 'selected': true },
                                 'oncore': { 'value': oncoreValue, 'selected': true },
                                 'unmapped': false
                             };
@@ -918,24 +941,92 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     }
 
-    // Load the saved checkpoint when the page is initialized
-    document.addEventListener('DOMContentLoaded', () => {
-        $.ajax({
-            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocolNo}`,
+    // Simple oncore request for page render, additional query defaults to null
+    function fetchOncore(protocol, query='') {
+        return $.ajax({
+            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=${protocol}${query}`,
             method: "GET",
-            dataType: "json",
-            success: function (data) {
-                let dict = data[0];
-                oncore_fields = Object.keys(dict);
-                console.log('OnCore fields fetched:', oncore_fields);
-                
-                // Load existing mappings
-                load_checkpoint();
-            },
-            error: function (xhr, status, error) {
-                console.error('Error fetching protocols:', error, xhr.responseText);
+            dataType: "json"
+        }).then(data => data[0]);
+    }
+
+    // Even if a request fails, I still want the site to load
+    function safeFetchOncore(protocol, query='') {
+        return fetchOncore(protocol, query)
+            .then(data => ({ success: true, data }))
+            .catch(err => {
+                console.error(`Failed endpoint: ${protocol}`, err.responseText || err);
+                return { success: false, data: null };
+            });
+    }
+
+    function getAllKeys(obj, prefix = '') {
+        let keys = [];
+
+        for (const key in obj) {
+            const value = obj[key];
+            const fullKey = prefix ? `${prefix}.${key}` : key;
+
+            keys.push(fullKey);
+
+            if (value && typeof value === "object") {
+                if (Array.isArray(value)) {
+                    value.forEach((item, i) => {
+                        if (typeof item === "object") {
+                            keys = keys.concat(getAllKeys(item, `${fullKey}[${i}]`));
+                        }
+                    });
+                } else {
+                    keys = keys.concat(getAllKeys(value, fullKey));
+                }
             }
-        });
+        }
+
+        return keys;
+    }
+
+    // Load the saved checkpoint when the page is initialized
+    document.addEventListener('DOMContentLoaded', async () => {
+
+        try {
+            // First request for protocolId
+            const protocol = await safeFetchOncore('protocols', `&protocolNo=${protocolNo}`);
+            const protocolId = protocol.data?.protocolId;
+
+            const api = {
+                protocolSponsors: `&protocolId=${protocolId}`,
+                protocolStaff: `&protocolId=${protocolId}`,
+                protocolManagementDetails: `&protocolId=${protocolId}`,
+                protocolPrmcReviews: `&protocolId=${protocolId}`,
+                protocolTasks: `&protocolId=${protocolId}`,
+                protocolInd: `&protocolId=${protocolId}`,
+                contactCredentials: `&contactId=${contactId}`
+            };
+
+            // Run all remaining calls in parallel safely
+            const requests = Object.entries(api).map(([endpoint, query]) =>
+                safeFetchOncore(endpoint, query)
+            );
+
+            const results = await Promise.all(requests);
+
+            // Combine successful results only
+            const allResponses = [protocol, ...results]
+                .filter(r => r.success)
+                .map(r => r.data);
+
+            oncore_fields = [
+                ...new Set(allResponses.flatMap(obj => getAllKeys(obj)))
+            ];
+
+            console.log("All OnCore fields (successful only):", oncore_fields);
+
+            load_checkpoint();
+
+        } catch (err) {
+            console.error("Unexpected OnCore loading failure:", err);
+        }
+
 
         document.getElementById('sync-btn').addEventListener('click', () => {
             //modalTest(redcap_record, oncore_record, handleRecordSelection);
