@@ -113,6 +113,20 @@ class ROCS extends AbstractExternalModule
         return FALSE;
     }
 
+    private static function isDemographicsPage() {
+        if ($_GET['page'] === 'demographics') {
+            return TRUE;
+        }
+        return FALSE;
+    }
+
+    private static function isRegulatoryPage() {
+        if ($_GET['page'] === 'regulatory') {
+            return TRUE;
+        }
+        return FALSE;
+    }
+
     // This function needs more updates before it is finished.
     private static function isFieldMappingPage()
     {
@@ -187,6 +201,37 @@ class ROCS extends AbstractExternalModule
                 const project_title = <?= json_encode($project_title) ?>;
                 const API_URL = <?= json_encode($apiUrl); ?>;
                 const project_id = <?= json_encode($_GET['pid']); ?>;
+            </script>
+            <?php
+        }
+        else if (self::isRegulatoryPage() || self::isDemographicsPage()) {
+            // TODO: implement a sync button that uses the current record
+            ?>
+            <script>
+                console.log('you\'re on either the demogrpahics or regulatory pages.');
+                document.addEventListener('DOMContentLoaded', () => {
+                    const container = document.getElementById('dataEntryTopOptionsButtons');
+                    const modify = container.children[1];
+
+                    const sync_button = document.createElement('button');
+                    sync_button.id = 'sync_button';
+                    sync_button.classList = 'jqbuttonmed ui-button ui-corner-all ui-widget';
+                    sync_button.style = 'color:#444;';
+                    sync_button.innerHTML = `
+                    <i class='fas fa-arrows-rotate'></i>
+                    <span>Sync Record with OnCore</span>
+                `;
+
+                    if (modify) {
+                        container.insertBefore(sync_button, modify.nextSibling);
+                    } else {
+                        container.appendChild(sync_button);
+                    }
+
+                    sync_button.addEventListener('click', () => {
+                       console.log('button clicked');
+                    });
+                });
             </script>
             <?php
         }
