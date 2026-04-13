@@ -91,10 +91,11 @@ class ROCS extends AbstractExternalModule
         return FALSE;
     }
 
-    protected function includeJS($file)
+    // Script assumes root level, so include folders
+    protected function includeJS($path)
     {
         // Use this function to use your JavaScript files in the frontend
-        echo '<script src="' . $this->getUrl($file) . '"></script>';
+        echo '<script src="' . $this->getUrl($path) . '"></script>';
     }
 
     protected function variable()
@@ -146,42 +147,43 @@ class ROCS extends AbstractExternalModule
         // Get the OnCore API base from the project settings
         $oncore_url = $this->getProjectSetting('oncore-base-url');
 
+        $instruments = REDCap::getInstrumentNames(); // Get instrument names
+
+        // Organize the data dictionary by form_name
+        $raw_dict = REDCap::getDataDictionary('array');
+        $data_dict = [];
+        foreach ($raw_dict as $field_name => $field_info) {
+            $form_name = $field_info['form_name'];
+            if (!isset($data_dict[$form_name])) {
+                $data_dict[$form_name] = [];
+            }
+            $data_dict[$form_name][$field_name] = $field_info;
+        }
+
+        // Initialize an empty array to store data by instrument
+        $data_by_instrument = [];
+
+        // Loop through each instrument and retrieve only its data
+        foreach ($instruments as $instrument_name => $instrument_label) {
+            if (!isset($data_dict[$instrument_name])) continue;
+
+            // Get field names for this instrument
+            $instrument_fields = array_keys($data_dict[$instrument_name]);
+
+            // Retrieve data for only those fields
+            if (!empty($instrument_fields)) {
+                $records = REDCap::getData([
+                    'project_id' => $project_id,
+                    'return_format' => 'json',
+                    'fields' => $instrument_fields
+                ]);
+
+                $data_by_instrument[$instrument_name] = json_decode($records, true);
+            }
+        }
+
         if (self::isFieldMappingPage()) {
             $project_id = $_GET['pid']; // or however you're getting the project ID
-            $instruments = REDCap::getInstrumentNames(); // Get instrument names
-
-            // Organize the data dictionary by form_name
-            $raw_dict = REDCap::getDataDictionary('array');
-            $data_dict = [];
-            foreach ($raw_dict as $field_name => $field_info) {
-                $form_name = $field_info['form_name'];
-                if (!isset($data_dict[$form_name])) {
-                    $data_dict[$form_name] = [];
-                }
-                $data_dict[$form_name][$field_name] = $field_info;
-            }
-
-            // Initialize an empty array to store data by instrument
-            $data_by_instrument = [];
-
-            // Loop through each instrument and retrieve only its data
-            foreach ($instruments as $instrument_name => $instrument_label) {
-                if (!isset($data_dict[$instrument_name])) continue;
-
-                // Get field names for this instrument
-                $instrument_fields = array_keys($data_dict[$instrument_name]);
-
-                // Retrieve data for only those fields
-                if (!empty($instrument_fields)) {
-                    $records = REDCap::getData([
-                        'project_id' => $project_id,
-                        'return_format' => 'json',
-                        'fields' => $instrument_fields
-                    ]);
-
-                    $data_by_instrument[$instrument_name] = json_decode($records, true);
-                }
-            }
 
             $form = $this->getProjectSetting('form-id');
             $classifier = $this->getProjectSetting('class-field');
@@ -206,8 +208,13 @@ class ROCS extends AbstractExternalModule
         }
         else if (self::isRegulatoryPage() || self::isDemographicsPage()) {
             // TODO: implement a sync button that uses the current record
+            include 'scripts/scripts.php';
+            $mappings = $this->getProjectSetting('field-mappings');
             ?>
             <script>
+                const dictionary = <?= json_encode($data_dict) ?>;
+                const mappings = <?= json_encode($mappings) ?>;
+
                 console.log('you\'re on either the demogrpahics or regulatory pages.');
                 document.addEventListener('DOMContentLoaded', () => {
                     const container = document.getElementById('dataEntryTopOptionsButtons');
@@ -230,6 +237,7 @@ class ROCS extends AbstractExternalModule
 
                     sync_button.addEventListener('click', () => {
                        console.log('button clicked');
+                        syncByID('eirb_number');
                     });
                 });
             </script>

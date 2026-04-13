@@ -15,8 +15,11 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     const MAX_INPUT_VARS = <?= (int)$maxInputVars ?>;
     const displayed = []; // tracks displayed instruments
     let oncore_fields = null;
+
+    // TODO: replace this with a check to a record, and then retry until we get one that works
     const protocolNo = '15-0927-F1V'; // sample that was arbitrarily set, need a way around this
     const eIRBno = '46000'; // sample that was arbitrarily set, need a way around this
+
     let mappings = false;
     const contactId = ''; // not sure where I might find this
 </script>
@@ -231,34 +234,30 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             const toAdd = selected.filter(f => !displayed.includes(f));
             const toRemove = displayed.filter(f => !selected.includes(f));
 
-            // Handle removals first, with warnings
-            let safeToRemove = true;
+            // Handle removals with warnings for forms that have mapped data
             for (const formKey of toRemove) {
                 const table = document.getElementById(formKey);
-                if (!table) continue;
 
-                // Check if table has configured data (non-empty selects)
-                const selects = Array.from(table.querySelectorAll('select'));
-                const hasConfiguredData = selects.some(sel => sel.value && sel.value !== "");
+                if (table) {
+                    const selects = Array.from(table.querySelectorAll('select'));
+                    const hasConfiguredData = selects.some(sel => sel.value && sel.value !== "");
 
-                if (hasConfiguredData) {
-                    const confirmRemoval = confirm(
-                        `Warning: The form "${instruments[formKey]}" has mapped data. Are you sure you want to remove it?`
-                    );
-                    if (!confirmRemoval) {
-                        safeToRemove = false;
-                        continue; // Skip this form
+                    if (hasConfiguredData) {
+                        const confirmRemoval = confirm(
+                            `Warning: The form "${instruments[formKey]}" has mapped data. Are you sure you want to remove it?`
+                        );
+                        if (!confirmRemoval) {
+                            continue; // User said no — skip removal entirely
+                        }
                     }
+
+                    // Remove from DOM whether or not it had data (user confirmed if needed)
+                    table.remove();
                 }
 
-                // Remove the form from DOM and displayed
-                table.remove();
+                // Remove from displayed regardless of whether table existed in DOM
                 const index = displayed.indexOf(formKey);
                 if (index !== -1) displayed.splice(index, 1);
-            }
-
-            if (selected.length > 0) {
-                document.getElementById('instruments_list').innerHTML='';
             }
 
             // Handle additions
@@ -270,12 +269,12 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
                 const header = document.createElement('thead');
                 header.innerHTML = `
-                    <tr>
-                        <th>${instruments[selectedForm]} Fields</th>
-                        <th>REDCap Field Label</th>
-                        <th>OnCore Field</th>
-                        <th>Include, But Don't Adjudicate</th>
-                    </tr>`;
+            <tr>
+                <th>${instruments[selectedForm]} Fields</th>
+                <th>REDCap Field Label</th>
+                <th>OnCore Field</th>
+                <th>Include, But Don't Adjudicate</th>
+            </tr>`;
                 table.appendChild(header);
 
                 const tbody = document.createElement('tbody');
@@ -287,30 +286,23 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     row.className = i % 2 === 0 ? 'even' : 'odd';
 
                     const selectId = `${selectedForm}_${redcapField}`;
-                    const checkId = `display_${redcapField}`;
                     row.innerHTML = `
-                        <td style="width:50%"><label for="${selectId}">${redcapField}</label></td>
-                        <td>
-                            ${
-                                dictionary[selectedForm][redcapField].field_label.length > 50
-                                    ? dictionary[selectedForm][redcapField].field_label.slice(0, 50) + '…'
-                                    : dictionary[selectedForm][redcapField].field_label
-                            }
-                        </td>
-                        <td style="width:50%">
-                            <select name="${redcapField}" id="${selectId}">
-                                <option value="">None</option>
-                            </select>
-                        </td>
-                        <td>
-                        <td style="width:15%; text-align:center;">
-                            <input type="checkbox"
-                                   class="include-unmapped"
-                                   data-field="${redcapField}">
-                        </td>
-                    `;
+                <td style="width:50%"><label for="${selectId}">${redcapField}</label></td>
+                <td>
+                    ${dictionary[selectedForm][redcapField].field_label.length > 50
+                        ? dictionary[selectedForm][redcapField].field_label.slice(0, 50) + '…'
+                        : dictionary[selectedForm][redcapField].field_label}
+                </td>
+                <td style="width:50%">
+                    <select name="${redcapField}" id="${selectId}">
+                        <option value="">None</option>
+                    </select>
+                </td>
+                <td style="width:15%; text-align:center;">
+                    <input type="checkbox" class="include-unmapped" data-field="${redcapField}">
+                </td>
+            `;
 
-                    // Populate the select with OnCore fields
                     const selectEl = row.querySelector('select');
                     if (Array.isArray(oncore_fields)) {
                         oncore_fields.forEach(field => {
@@ -344,7 +336,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     function rebuild_from_mappings(instruments, dictionary, existingMappings) {
-        console.log(instruments, dictionary, existingMappings);
+        console.log('instruments: '+instruments, 'dictionary: '+dictionary, 'existingMappings: '+existingMappings);
         const container = document.getElementById('instruments_list');
         if (!container) return;
 
@@ -419,6 +411,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         option.value = field;
                         option.textContent = field;
 
+                        console.log(mappedFields[redcapField]);
+
                         // mark selected if it matches the saved mapping
                         if (mappedFields[redcapField].mapping === field) option.selected = true;
 
@@ -443,6 +437,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     function checkpoint() {
+        //TODO: save the last batch of fields from oncore?
         console.log('checkpoint')
         const mapping = {};
 
@@ -480,6 +475,8 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             mapping[instrument] = instrumentMapping;
         });
 
+        mappings = mapping;
+
         // Send to server - include the displayed array
         $.ajax({
             url: "<?= $module->getUrl('scripts/save_mappings.php') ?>",
@@ -487,7 +484,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             data: {
                 pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
                 redcap_csrf_token: <?= json_encode($csrf) ?>,
-                mappings: JSON.stringify(mapping),
+                "mappings": JSON.stringify(mappings),
                 displayed: JSON.stringify(displayed)  // <-- Save which forms should be displayed
             },
             success: function (result) {
@@ -505,7 +502,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             method: "GET",
             dataType: "json",
             success: function (result) {
-                console.log(result);
+                console.log('load checkpoint result', result);
                 if (result.status !== 'success') {
                     console.error('Failed to load mappings:', result.error || 'Unknown error');
                     const loader = document.getElementById('forms-loader');
