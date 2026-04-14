@@ -18,7 +18,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     // TODO: replace this with a check to a record, and then retry until we get one that works
     const protocolNo = '15-0927-F1V'; // sample that was arbitrarily set, need a way around this
-    const eIRBno = '46000'; // sample that was arbitrarily set, need a way around this
+    const eIRBno = 46000; // sample that was arbitrarily set, need a way around this
 
     let mappings = false;
     const contactId = ''; // not sure where I might find this
@@ -433,7 +433,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     function checkpoint() {
-        //TODO: save the last batch of fields from oncore?
         console.log('checkpoint')
         const mapping = {};
 
@@ -713,6 +712,10 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
     function getFromOnCoreWithIRBNo(record, dictionary) {
+        console.log(record);
+        if (!record) {
+            return;
+        }
         // TODO: Come back and cleanup the references to comparisons, we're using that model moving forward
         const protocol_number = record['irb_number']; // protocol #
         console.log('protocol num' + protocol_number);
@@ -908,6 +911,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             });
         }
         else {
+            console.log(field, value);
             $.ajax({
                 url: '<?= $module->getUrl("scripts/get_records.php") ?>',
                 data: {
@@ -916,6 +920,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 },
                 success: function (data) {
                     let record = data[0];
+                    console.log(data)
                     getFromOnCoreWithIRBNo(record, dictionary);
                 },
                 error: function (xhr, status, error) {
@@ -1011,6 +1016,9 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
             oncore_fields = [
                 ...new Set(allResponses.flatMap(obj => getAllKeys(obj)))
             ];
+
+            // get values in alphabetical
+            oncore_fields.sort();
 
             console.log("All OnCore fields (successful only):", oncore_fields);
 

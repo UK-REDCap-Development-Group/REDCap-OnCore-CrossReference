@@ -46,12 +46,12 @@
         {
             "key": "oncore-secret",
             "name": "OnCore Secret",
-            "type": "text"
+            "type": "password"
         },
         {
             "key": "oncore-client",
             "name": "OnCore Client ID",
-            "type": "text"
+            "type": "password"
         },
         {
             "key": "single-sync-pages",
