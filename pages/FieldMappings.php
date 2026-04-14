@@ -336,14 +336,12 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     function rebuild_from_mappings(instruments, dictionary, existingMappings) {
-        console.log('instruments: '+instruments, 'dictionary: '+dictionary, 'existingMappings: '+existingMappings);
+        console.log(dictionary);
         const container = document.getElementById('instruments_list');
         if (!container) return;
 
         // Create a fragment to build the tables in memory
         const fragment = document.createDocumentFragment();
-
-        console.log(displayed);
 
         // Only build tables for instruments in the displayed array
         displayed.forEach(instrumentKey => {
@@ -410,8 +408,6 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         const option = document.createElement('option');
                         option.value = field;
                         option.textContent = field;
-
-                        console.log(mappedFields[redcapField]);
 
                         // mark selected if it matches the saved mapping
                         if (mappedFields[redcapField].mapping === field) option.selected = true;

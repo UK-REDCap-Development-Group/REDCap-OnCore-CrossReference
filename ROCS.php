@@ -11,6 +11,19 @@ use GuzzleHttp\Exception\RequestException;
 
 class ROCS extends AbstractExternalModule
 {   
+    public function preconfigure() {
+        $init = $this->getProjectSetting('init');
+
+        if (!$init) {
+            $instruments = REDCap::getInstrumentNames();
+
+            if (array_key_exists('demographics', $instruments) && array_key_exists('regulatory', $instruments)) {
+                $this->setProjectSetting('sync-page', ['demographics', 'regulatory']);
+            }
+
+            $this->setProjectSetting('init', true);
+        }
+    }
 
     // Functional proxy to hit from frontend to communicate with external APIs. Used in proxy.php
     // This version is assuming data is included as a json (not using JSON.stringify).
@@ -121,6 +134,13 @@ class ROCS extends AbstractExternalModule
         return FALSE;
     }
 
+    private static function isInstrumentPage($instrument) {
+        if ($_GET['page'] === $instrument) {
+            return TRUE;
+        }
+        return FALSE;
+    }
+
     private static function isRegulatoryPage() {
         if ($_GET['page'] === 'regulatory') {
             return TRUE;
@@ -144,6 +164,7 @@ class ROCS extends AbstractExternalModule
 
     // Checks for which form we are on and includes instructions for mapping data to fiels on that page
     function redcap_every_page_top($project_id) {
+        $this->preconfigure();
         // Get the OnCore API base from the project settings
         $oncore_url = $this->getProjectSetting('oncore-base-url');
 
@@ -182,8 +203,21 @@ class ROCS extends AbstractExternalModule
             }
         }
 
+        // Dynamic check for selected pages that get sync buttons
+        $sync_pages = $this->getProjectSetting('sync-page');
+        $is_configured_sync_page = false;
+
+        if (is_array($sync_pages)) {
+            foreach ($sync_pages as $instrument) {
+                if (self::isInstrumentPage($instrument)) {
+                    $is_configured_sync_page = true;
+                    break;
+                }
+            }
+        }
+
         if (self::isFieldMappingPage()) {
-            $project_id = $_GET['pid']; // or however you're getting the project ID
+            $project_id = $_GET['pid'];
 
             $form = $this->getProjectSetting('form-id');
             $classifier = $this->getProjectSetting('class-field');
@@ -206,8 +240,8 @@ class ROCS extends AbstractExternalModule
             </script>
             <?php
         }
-        else if (self::isRegulatoryPage() || self::isDemographicsPage()) {
-            // TODO: implement a sync button that uses the current record
+        // boolean replaced individual functions for each page, allowing config instead of hardcoding
+        else if ($is_configured_sync_page) {
             include 'scripts/scripts.php';
             $mappings = $this->getProjectSetting('field-mappings');
             ?>
@@ -215,7 +249,7 @@ class ROCS extends AbstractExternalModule
                 const dictionary = <?= json_encode($data_dict) ?>;
                 const mappings = <?= json_encode($mappings) ?>;
 
-                console.log('you\'re on either the demogrpahics or regulatory pages.');
+                console.log('You are on a configured sync page.');
                 document.addEventListener('DOMContentLoaded', () => {
                     const container = document.getElementById('dataEntryTopOptionsButtons');
                     const modify = container.children[1];
@@ -236,7 +270,7 @@ class ROCS extends AbstractExternalModule
                     }
 
                     sync_button.addEventListener('click', () => {
-                       console.log('button clicked');
+                        console.log('button clicked');
                         syncByID('eirb_number');
                     });
                 });
