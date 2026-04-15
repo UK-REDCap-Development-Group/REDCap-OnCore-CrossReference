@@ -335,10 +335,163 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
     }
 
+    // Check the mapping against the dictionary and ensure that forms and fields are all still valid
+    function validity_check(mappings, dictionary) {
+        console.log(mappings)
+        Object.keys(mappings).forEach(form => {
+            console.log('mapping: ', form);
+            console.log(mappings[form]);
+            if (dictionary[form]) {
+                console.log('dictionary: ', dictionary[form])
+                Object.keys(mappings[form]).forEach(field => {
+                    console.log('mapping: ', field)
+                    if (!dictionary[form][field]) {
+                        // TODO: implement a modal asking a user to correct the missing field
+                    }
+                });
+            }
+            else {
+                missingFormModal(mappings, form, instruments);
+            }
+        })
+    }
+
+    // Function can be called to build a modal which makes the user solve an issue detected in the pre-check
+    function missingFormModal(mapping, offender, instruments) {
+        const built = buildModal();
+        if (!built) return; // The modal already exists
+
+        const { modalOverlay, modalBox } = built;
+
+        // Build the dropdown options from the instruments object
+        let dropdownOptions = '<option value="">-- Select a replacement form --</option>';
+        Object.entries(instruments).forEach(([key, value]) => {
+            dropdownOptions += `<option value="${key}">${value}</option>`;
+        });
+
+        // 2. Modal content with the new layout (Dropdown + Delete Option)
+        let modalContent = `
+        <div style="padding: 10px;">
+            <h3 style="color: #d9534f; margin-top: 0;">Missing Form Detected: <strong>${offender}</strong></h3>
+            <p>ROCS detected that a previously mapped form (<strong>${offender}</strong>) no longer exists in this REDCap project.</p>
+            <p>Please choose how you would like to resolve this issue:</p>
+
+            <div style="margin: 20px 0; padding: 15px; border: 1px solid #ccc; background-color: #f9f9f9; border-radius: 5px;">
+                <label for="replacement-form" style="font-weight: bold; display: block; margin-bottom: 8px;">Option 1: Map to a different form</label>
+                <select id="replacement-form" style="width: 100%; padding: 6px;">
+                    ${dropdownOptions}
+                </select>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <p style="margin-bottom: 5px;"><strong>Option 2: Delete this mapping entirely</strong></p>
+                <p style="font-size: 0.9em; color: #666;">If this form was intentionally deleted from REDCap, you can safely remove it from ROCS.</p>
+            </div>
+
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button id="delete_btn" style="background-color: #d9534f; color: white; border: 1px solid #d43f3a; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Delete Mapping</button>
+                <button id="update_btn" class="selectA_btn" style="padding: 6px 12px; cursor: pointer;">Update Mapping</button>
+                <button id="close_btn" class="close-button" style="padding: 6px 12px; cursor: pointer;">Cancel</button>
+            </div>
+        </div>
+    `;
+
+        modalBox.innerHTML = modalContent;
+        modalOverlay.appendChild(modalBox);
+        document.body.appendChild(modalOverlay);
+
+        const closeModal = () => {
+            if (modalOverlay && modalOverlay.parentNode) {
+                modalOverlay.parentNode.removeChild(modalOverlay);
+            }
+        };
+
+        // Close modal on Cancel or background click
+        document.getElementById('close_btn').addEventListener('click', (event) => {
+            closeModal(false); // close modal but no checkpoint
+        });
+        modalOverlay.addEventListener('click', (event) => {
+            if (event.target === modalOverlay) {
+                closeModal(false); // close modal but no checkpoint
+            }
+        });
+
+        // Handle "Update Mapping"
+        document.getElementById('update_btn').addEventListener('click', () => {
+            const selectedForm = document.getElementById('replacement-form').value;
+
+            if (!selectedForm) {
+                alert("Please select a replacement form from the dropdown, or choose 'Delete Mapping'.");
+                return;
+            }
+
+            mapping[selectedForm] = mapping[offender];
+            delete mapping[offender];
+
+            // Send to server - include the displayed array
+            $.ajax({
+                url: "<?= $module->getUrl('scripts/save_mappings.php') ?>",
+                method: "POST",
+                data: {
+                    pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                    redcap_csrf_token: <?= json_encode($csrf) ?>,
+                    "mappings": JSON.stringify(mapping),
+                    displayed: JSON.stringify(displayed)  // <-- Save which forms should be displayed
+                },
+                success: function (result) {
+                    console.log("Checkpoint saved:", result);
+                },
+                error: function (xhr, status, error) {
+                    console.error("Error in checkpoint:", error, xhr.responseText);
+                }
+            });
+
+            closeModal();
+        });
+
+        // Handle "Delete Mapping"
+        document.getElementById('delete_btn').addEventListener('click', () => {
+            if (confirm(`Are you sure you want to delete the OnCore mapping for ${offender}? This cannot be undone.`)) {
+                delete mapping[offender];
+
+                // Send to server - include the displayed array
+                $.ajax({
+                    url: "<?= $module->getUrl('scripts/save_mappings.php') ?>",
+                    method: "POST",
+                    data: {
+                        pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                        redcap_csrf_token: <?= json_encode($csrf) ?>,
+                        "mappings": JSON.stringify(mapping),
+                        displayed: JSON.stringify(displayed)  // <-- Save which forms should be displayed
+                    },
+                    success: function (result) {
+                        console.log("Checkpoint saved:", result);
+                    },
+                    error: function (xhr, status, error) {
+                        console.error("Error in checkpoint:", error, xhr.responseText);
+                    }
+                });
+
+                closeModal();
+            }
+        });
+
+        // Close modal on Cancel or background click
+        document.getElementById('close_btn').addEventListener('click', () => closeModal());
+
+        modalOverlay.addEventListener('click', (event) => {
+            if (event.target === modalOverlay) closeModal();
+        });
+    }
+
     function rebuild_from_mappings(instruments, dictionary, existingMappings) {
-        console.log(dictionary);
+        console.log('dictionary', dictionary);
+        console.log('existing mappings:', existingMappings);
+
         const container = document.getElementById('instruments_list');
         if (!container) return;
+
+        validity_check(existingMappings, dictionary);
 
         // Create a fragment to build the tables in memory
         const fragment = document.createDocumentFragment();
@@ -507,7 +660,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                     return;
                 }
 
-                if (!result.data) {
+                if (result.data.length === 0) {
                     let list = document.getElementById('instruments_list');
                     list.innerHTML = `<h2>You currently have not selected any Forms for mapping.</h2>
                                       <h2>Select the "Manage Forms" option above to begin mapping your first Form.</h2>`;
