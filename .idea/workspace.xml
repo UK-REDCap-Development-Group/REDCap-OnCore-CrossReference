@@ -7,8 +7,9 @@
     <list default="true" id="f740906d-bd68-4891-9807-9142297f32e9" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ROCS.php" beforeDir="false" afterPath="$PROJECT_DIR$/ROCS.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/css/field_mappings.css" beforeDir="false" afterPath="$PROJECT_DIR$/css/field_mappings.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/js/modals.js" beforeDir="false" afterPath="$PROJECT_DIR$/js/modals.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pages/FieldMappings.php" beforeDir="false" afterPath="$PROJECT_DIR$/pages/FieldMappings.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/get_all_records.php" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/get_all_records.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -87,7 +88,7 @@
       <workItem from="1776190079352" duration="210000" />
       <workItem from="1776190431051" duration="116000" />
       <workItem from="1776190647226" duration="10904000" />
-      <workItem from="1776351538659" duration="5796000" />
+      <workItem from="1776351538659" duration="10226000" />
     </task>
     <servers />
   </component>

@@ -18,6 +18,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
     const MAX_INPUT_VARS = <?= (int)$maxInputVars ?>;
     let displayed = []; // tracks displayed instruments
     let oncore_fields = null;
+    const toSave = {}; // this stores adjudicates and saves them to config
 
     const protocolNo = <?= json_encode($protocol[0]) ?>;
     const eIRBno = <?= json_encode($eirb[0]) ?>;
@@ -888,21 +889,24 @@ $eirb = $module->getProjectSetting('sample-eirb');
     }
 
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
-    function getFromOnCoreWithIRBNo(record, dictionary) {
+    function getFromOnCoreWithIRBNo(record, show=false) {
         console.log(record);
         if (!record) {
             return;
         }
         // TODO: Come back and cleanup the references to comparisons, we're using that model moving forward
         const protocol_number = record['irb_number']; // protocol #
-        console.log('protocol num' + protocol_number);
+        const eirb_number = record['eirb_number']; // protocol #
+        //console.log('protocol num' + protocol_number);
 
         $.ajax({
-            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocol_number}`,
+            //url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocol_number}`,
+            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${eirb_number}`,
             method: "GET",
             dataType: "json",
             success: function (data) {
                 let dict = data[0];
+                console.log(data);
                 console.log('OnCore data fetched for protocol:', dict);
                 
                 // Collect all mismatches first
@@ -981,8 +985,13 @@ $eirb = $module->getProjectSetting('sample-eirb');
                     experimental[form] = form_data;
                 });
 
-                console.log('New experimental structure:',experimental);
-                showComparisonTable(experimental, record, dictionary);
+                console.log('New experimental structure:', experimental);
+                if (show) {
+                    showComparisonTable(experimental, record);
+                } else {
+                    console.log(experimental);
+                    toSave[record.record_id] = experimental;
+                }
 
                 console.log('Record mapped with OnCore data: ', record);
             },
@@ -1072,48 +1081,45 @@ $eirb = $module->getProjectSetting('sample-eirb');
         });
     }
 
-    function getFromREDCap(field, value, dictionary, all=false) {
-        console.log('pressed');
-        if (all) {
-            $.ajax({
-                url: '<?= $module->getUrl("scripts/get_all_records.php") ?>',
-                data: {
-                },
-                success: function (data) {
-                    console.log(data);
-                },
-                error: function (xhr, status, error) {
-                    console.error('Error fetching REDCap record:', error, xhr.responseText);
-                }
-            });
-        }
-        else {
-            console.log(field, value);
-            $.ajax({
-                url: '<?= $module->getUrl("scripts/get_records.php") ?>',
-                data: {
-                    'field': field,
-                    'value': value
-                },
-                success: function (data) {
-                    let record = data[0];
-                    console.log(data)
-                    getFromOnCoreWithIRBNo(record, dictionary);
-                },
-                error: function (xhr, status, error) {
-                    console.error('Error fetching REDCap record:', error, xhr.responseText);
-                }
-            });
-        }
+    function getOneFromREDCap(field, value) {
+        console.log(field, value);
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/get_records.php") ?>',
+            data: {
+                'field': field,
+                'value': value
+            },
+            success: function (data) {
+                let record = data[0];
+                console.log(data)
+                getFromOnCoreWithIRBNo(record);
+            },
+            error: function (xhr, status, error) {
+                console.error('Error fetching REDCap record:', error, xhr.responseText);
+            }
+        });
     }
 
-    // Pull all records with a valid protocol number and check if they need to be adjudicated.
-    function fullSync(records) {
-        // Save records needing adjudication to logs and allow a user to adjudicate them later.
-        // Ensure that you only pull records which don't have the checkmark on "ignore"
-
-
-
+    function getAllFromREDCap() {
+        console.log(displayed);
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/get_all_records.php") ?>',
+            data: {
+                forms: displayed
+            },
+            success: function (data) {
+                // TODO: finish this looping to save records, then figure out how to run it in the background
+                console.log(data);
+                data.forEach(record => {
+                    console.log(record);
+                    getFromOnCoreWithIRBNo(record);
+                });
+                console.log(toSave);
+            },
+            error: function (xhr, status, error) {
+                console.error('Error fetching REDCap record:', error, xhr.responseText);
+            }
+        });
     }
 
     // Simple oncore request for page render, additional query defaults to null
@@ -1162,7 +1168,6 @@ $eirb = $module->getProjectSetting('sample-eirb');
 
     // Load the saved checkpoint when the page is initialized
     document.addEventListener('DOMContentLoaded', async () => {
-
         try {
             // First request for protocolId
             const protocol = await safeFetchOncore('protocols', `&protocolNo=${protocolNo}`);
@@ -1207,9 +1212,8 @@ $eirb = $module->getProjectSetting('sample-eirb');
 
 
         document.getElementById('sync-btn').addEventListener('click', () => {
-            //modalTest(redcap_record, oncore_record, handleRecordSelection);
-            //let oncore = getFromOnCore(11, protocolNo); // manual test using Saltzman record
-            getFromREDCap('eirb_number', eIRBno, dictionary);
+            //getOneFromREDCap('eirb_number', eIRBno); // single record test
+            getAllFromREDCap();
         });
 
         document.getElementById('upload-btn').addEventListener('click', async () => {

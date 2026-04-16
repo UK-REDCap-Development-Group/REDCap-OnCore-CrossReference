@@ -162,8 +162,9 @@ class ROCS extends AbstractExternalModule
         return $_SERVER['REQUEST_URI'];
     }
 
-    // Collect a specific form from the project
-    function stuff() {
+    // Collect mapped forms, ignore records that are
+    function fullSync() {
+
     }
 
     // Checks for which form we are on and includes instructions for mapping data to fiels on that page
