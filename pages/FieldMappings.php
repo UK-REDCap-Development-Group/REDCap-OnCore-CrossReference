@@ -19,8 +19,8 @@ $eirb = $module->getProjectSetting('sample-eirb');
     let displayed = []; // tracks displayed instruments
     let oncore_fields = null;
 
-    const protocolNo = <?= json_encode($protocol) ?>;
-    const eIRBno = <?= json_encode($eirb) ?>;
+    const protocolNo = <?= json_encode($protocol[0]) ?>;
+    const eIRBno = <?= json_encode($eirb[0]) ?>;
 
     if (!protocolNo) {
         alert("CONFIG ERROR: Please visit external module settings and provide a sample Protocol Number.")
@@ -32,6 +32,10 @@ $eirb = $module->getProjectSetting('sample-eirb');
 
     let mappings = false;
     const contactId = ''; // not sure where I might find this
+
+    // Inject PHP constants into JavaScript
+    const REDCAP_WEBROOT = <?= json_encode(APP_PATH_WEBROOT) ?>;
+    const PROJECT_ID = <?= json_encode($_GET['pid']) ?>;
 </script>
 
 <script>
@@ -280,10 +284,10 @@ $eirb = $module->getProjectSetting('sample-eirb');
                 const header = document.createElement('thead');
                 header.innerHTML = `
             <tr>
-                <th>${instruments[selectedForm]} Fields</th>
-                <th>REDCap Field Label</th>
-                <th>OnCore Field</th>
-                <th>Include, But Don't Adjudicate</th>
+                <th style="width: 25%;">${instruments[selectedForm]} Fields</th>
+                <th style="width: 35%;">REDCap Field Label</th>
+                <th style="width: 25%;">OnCore Field</th>
+                <th style="width: 15%;">Include, But Don't Adjudicate</th>
             </tr>`;
                 table.appendChild(header);
 
@@ -512,10 +516,10 @@ $eirb = $module->getProjectSetting('sample-eirb');
             
             const header = document.createElement('thead');
             header.innerHTML = `<tr>
-                                    <th>${instrumentLabel} Fields</th>
-                                    <th>REDCap Field Label</th>
-                                    <th>OnCore Field</th>
-                                    <th>Include, But Don't Adjudicate</th>
+                                    <th style="width: 25%;">${instrumentLabel} Fields</th>
+                                    <th style="width: 35%;">REDCap Field Label</th>
+                                    <th style="width: 25%;">OnCore Field</th>
+                                    <th style="width: 15%;">Include, But Don't Adjudicate</th>
                                  </tr>`;
             table.appendChild(header);
 
@@ -745,7 +749,9 @@ $eirb = $module->getProjectSetting('sample-eirb');
         const { modalOverlay, modalBox } = built;
 
         let modalContent = `
-            <p>Please select the record with the most accurate information.</p>
+            <h1>Adjudication for Record <a href="${app_path_webroot}DataEntry/record_home.php?pid=${pid}&id=${record.record_id}" target="_blank" class="hyperlink">${record.record_id}</a></h1>
+            <h3>Please select which data you would like to save: REDCap or OnCore.</h3>
+            <hr>
             <div class="modal-comparison-grid">
                 <div class="modal-column">
 
@@ -767,7 +773,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
                     <tbody style='overflow-y: auto;'>
                     <td>record_id</td>
                     <td>Record ID</td>
-                    <td>${record.record_id}</td>
+                    <td><a href="${app_path_webroot}DataEntry/record_home.php?pid=${pid}&id=${record.record_id}" target="_blank" class="hyperlink">${record.record_id}</a></td>
                     <td>N/A</td>
 `
             comparisons[form].forEach((set, i) => {

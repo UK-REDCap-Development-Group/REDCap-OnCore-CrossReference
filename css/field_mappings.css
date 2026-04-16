@@ -239,3 +239,8 @@ table.dataTable tbody tr.highlight td {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+.hyperlink {
+    text-decoration: underline !important;
+    color: #0000EE !important;
+}

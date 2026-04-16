@@ -158,6 +158,10 @@ class ROCS extends AbstractExternalModule
         return FALSE;
     }
 
+    public static function getRecordStatusDashboard($pid) {
+        return $_SERVER['REQUEST_URI'];
+    }
+
     // Collect a specific form from the project
     function stuff() {
     }
