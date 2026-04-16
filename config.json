@@ -13,30 +13,28 @@
     "system-settings": [],
     "project-settings": [
         {
-            "key": "identifier-select",
-            "name": "Please select which field should be used to find records in OnCore",
-            "type": "field-list",
-            "repeatable": false
-        },
-        {
             "key": "token-url-desc",
             "name": "Please input the url for the OnCore OAuth Token API source you wish to use below. The URL should look something like this:<br> https://oncore.forteresearchapps.com/forte-platform-web/api/oauth/token.",
-            "type": "descriptive"
+            "type": "descriptive",
+            "required": true
         },
         {
             "key": "oncore-token-url",
             "name": "OnCore API Token URL",
-            "type": "text"
+            "type": "text",
+            "required": true
         },
         {
             "key": "base-url-desc",
             "name": "Please input the base url for the OnCore API source you wish to use below. The URL should look something like this:<br> https://oncore.forteresearchapps.com/oncore-api/rest/.",
-            "type": "descriptive"
+            "type": "descriptive",
+            "required": true
         },
         {
             "key": "oncore-api-url",
             "name": "OnCore API Base URL",
-            "type": "text"
+            "type": "text",
+            "requiured": true
         },
         {
             "key": "secret-client-desc",
@@ -46,12 +44,32 @@
         {
             "key": "oncore-secret",
             "name": "OnCore Secret",
-            "type": "password"
+            "type": "password",
+            "required": true
         },
         {
             "key": "oncore-client",
             "name": "OnCore Client ID",
-            "type": "password"
+            "type": "password",
+            "required": true
+        },
+        {
+            "key": "sample-val-desc",
+            "name": "You must provide a protocol and an eIRB number which is used to collect fields from OnCore which are available for mapping data.",
+            "type": "sub_settings",
+            "sub_settings": [
+                {
+                    "key": "sample-protocol",
+                    "name": "Sample Protocol Number",
+                    "type": "text"
+                },
+                {
+                    "key": "sample-eirb",
+                    "name": "Sample eIRB Number",
+                    "type": "text"
+                }
+            ],
+            "required": true
         },
         {
             "key": "single-sync-pages",

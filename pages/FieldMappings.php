@@ -6,6 +6,9 @@ $csrf = $module->getCSRFToken();
 
 // Will use this value later for batching requests if max_input is hit
 $maxInputVars = ini_get('max_input_vars') ?: 1000;
+
+$protocol = $module->getProjectSetting('sample-protocol');
+$eirb = $module->getProjectSetting('sample-eirb');
 ?>
 
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
@@ -13,12 +16,19 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 <script>
     // Get max_input from php.ini into a js workable variable
     const MAX_INPUT_VARS = <?= (int)$maxInputVars ?>;
-    const displayed = []; // tracks displayed instruments
+    let displayed = []; // tracks displayed instruments
     let oncore_fields = null;
 
-    // TODO: replace this with a check to a record, and then retry until we get one that works
-    const protocolNo = '15-0927-F1V'; // sample that was arbitrarily set, need a way around this
-    const eIRBno = 46000; // sample that was arbitrarily set, need a way around this
+    const protocolNo = <?= json_encode($protocol) ?>;
+    const eIRBno = <?= json_encode($eirb) ?>;
+
+    if (!protocolNo) {
+        alert("CONFIG ERROR: Please visit external module settings and provide a sample Protocol Number.")
+    }
+
+    if (!eIRBno) {
+        alert("CONFIG ERROR: Please visit external module settings and provide a sample eIRB Number.")
+    }
 
     let mappings = false;
     const contactId = ''; // not sure where I might find this
@@ -336,162 +346,151 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
     }
 
     // Check the mapping against the dictionary and ensure that forms and fields are all still valid
-    function validity_check(mappings, dictionary) {
-        console.log(mappings)
-        Object.keys(mappings).forEach(form => {
-            console.log('mapping: ', form);
-            console.log(mappings[form]);
+    function validity_check(mappings, dictionary, instruments) {
+        // Use a flag to stop checking once we find the first error
+        let errorFound = false;
+
+        // for ... of lets us break the loop
+        for (const form of Object.keys(mappings)) {
+            if (errorFound) break;
+
             if (dictionary[form]) {
-                console.log('dictionary: ', dictionary[form])
-                Object.keys(mappings[form]).forEach(field => {
-                    console.log('mapping: ', field)
+                // The form exists, now check its fields
+                for (const field of Object.keys(mappings[form])) {
+                    if (errorFound) break;
+
                     if (!dictionary[form][field]) {
-                        // TODO: implement a modal asking a user to correct the missing field
+                        console.warn(`Missing Field Detected: ${field} in form ${form}`);
+
+                        // Call the unified modal for a missing FIELD
+                        resolveMappingModal('field', mappings, form, field, dictionary[form]);
+
+                        errorFound = true; // Trigger the breaks
                     }
-                });
+                }
+            } else {
+                console.warn(`Missing Form Detected: ${form}`);
+
+                // Call the unified modal for a missing FORM
+                resolveMappingModal('form', mappings, form, null, instruments);
+
+                errorFound = true; // Trigger the break
             }
-            else {
-                missingFormModal(mappings, form, instruments);
-            }
-        })
+        }
+
+        if (!errorFound) {
+            console.log("All mappings are valid!");
+        }
     }
 
-    // Function can be called to build a modal which makes the user solve an issue detected in the pre-check
-    function missingFormModal(mapping, offender, instruments) {
+    function resolveMappingModal(type, mapping, formName, offenderField, availableOptions) {
         const built = buildModal();
-        if (!built) return; // The modal already exists
+        if (!built) return;
 
         const { modalOverlay, modalBox } = built;
 
-        // Build the dropdown options from the instruments object
-        let dropdownOptions = '<option value="">-- Select a replacement form --</option>';
-        Object.entries(instruments).forEach(([key, value]) => {
-            dropdownOptions += `<option value="${key}">${value}</option>`;
+        // Set dynamic text based on the type
+        const isForm = type === 'form';
+        const targetName = isForm ? formName : offenderField;
+        const parentText = isForm ? "this REDCap project" : `the form <strong>${formName}</strong>`;
+
+        // Build Dropdown
+        let dropdownOptions = `<option value="">-- Select a replacement ${type} --</option>`;
+        Object.entries(availableOptions).forEach(([key, value]) => {
+            let label = typeof value === 'object' && value.field_label ?
+                value.field_label.replace(/(<([^>]+)>)/gi, "").substring(0, 50) + "..." : value;
+            dropdownOptions += `<option value="${key}">${key} (${label})</option>`;
         });
 
-        // 2. Modal content with the new layout (Dropdown + Delete Option)
-        let modalContent = `
+        // Modal UI
+        modalBox.innerHTML = `
         <div style="padding: 10px;">
-            <h3 style="color: #d9534f; margin-top: 0;">Missing Form Detected: <strong>${offender}</strong></h3>
-            <p>ROCS detected that a previously mapped form (<strong>${offender}</strong>) no longer exists in this REDCap project.</p>
-            <p>Please choose how you would like to resolve this issue:</p>
+            <h3 style="color: #d9534f; margin-top: 0;">Missing ${isForm ? 'Form' : 'Field'} Detected: <strong>${targetName}</strong></h3>
+            <p>ROCS detected that a previously mapped ${type} (<strong>${targetName}</strong>) no longer exists in ${parentText}.</p>
 
             <div style="margin: 20px 0; padding: 15px; border: 1px solid #ccc; background-color: #f9f9f9; border-radius: 5px;">
-                <label for="replacement-form" style="font-weight: bold; display: block; margin-bottom: 8px;">Option 1: Map to a different form</label>
-                <select id="replacement-form" style="width: 100%; padding: 6px;">
+                <label style="font-weight: bold; display: block; margin-bottom: 8px;">Option 1: Map to a different ${type}</label>
+                <select id="replacement-select" style="width: 100%; padding: 6px;">
                     ${dropdownOptions}
                 </select>
             </div>
 
             <div style="margin-bottom: 20px;">
-                <p style="margin-bottom: 5px;"><strong>Option 2: Delete this mapping entirely</strong></p>
-                <p style="font-size: 0.9em; color: #666;">If this form was intentionally deleted from REDCap, you can safely remove it from ROCS.</p>
+                <p style="margin-bottom: 5px;"><strong>Option 2: Delete this ${type} mapping</strong></p>
             </div>
 
             <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
-                <button id="delete_btn" style="background-color: #d9534f; color: white; border: 1px solid #d43f3a; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Delete Mapping</button>
                 <button id="update_btn" class="selectA_btn" style="padding: 6px 12px; cursor: pointer;">Update Mapping</button>
+                <button id="delete_btn" style="background-color: #d9534f; color: white; border: 1px solid #d43f3a; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Delete Mapping</button>
                 <button id="close_btn" class="close-button" style="padding: 6px 12px; cursor: pointer;">Cancel</button>
             </div>
         </div>
     `;
 
-        modalBox.innerHTML = modalContent;
         modalOverlay.appendChild(modalBox);
         document.body.appendChild(modalOverlay);
 
         const closeModal = () => {
-            if (modalOverlay && modalOverlay.parentNode) {
-                modalOverlay.parentNode.removeChild(modalOverlay);
-            }
+            if (modalOverlay && modalOverlay.parentNode) modalOverlay.parentNode.removeChild(modalOverlay);
         };
 
-        // Close modal on Cancel or background click
-        document.getElementById('close_btn').addEventListener('click', (event) => {
-            closeModal(false); // close modal but no checkpoint
-        });
-        modalOverlay.addEventListener('click', (event) => {
-            if (event.target === modalOverlay) {
-                closeModal(false); // close modal but no checkpoint
-            }
-        });
 
-        // Handle "Update Mapping"
+        // Selection for Update
         document.getElementById('update_btn').addEventListener('click', () => {
-            const selectedForm = document.getElementById('replacement-form').value;
+            const selected = document.getElementById('replacement-select').value;
+            if (!selected) return alert(`Please select a replacement ${type}.`);
 
-            if (!selectedForm) {
-                alert("Please select a replacement form from the dropdown, or choose 'Delete Mapping'.");
-                return;
+            if (isForm) {
+                mapping[selected] = mapping[formName];
+                delete mapping[formName];
+            } else {
+                mapping[formName][selected] = mapping[formName][offenderField];
+                delete mapping[formName][offenderField];
             }
 
-            mapping[selectedForm] = mapping[offender];
-            delete mapping[offender];
+            saveMappingAjax(mapping);
+        });
 
-            // Send to server - include the displayed array
+        // Selection for Deletion
+        document.getElementById('delete_btn').addEventListener('click', () => {
+            if (confirm(`Are you sure you want to delete the mapping for ${targetName}?`)) {
+                if (isForm) {
+                    delete mapping[formName];
+                } else {
+                    delete mapping[formName][offenderField];
+                }
+                mapping = sortMappings(mapping, instruments)
+                saveMappingAjax(mapping);
+            }
+        });
+
+        document.getElementById('close_btn').addEventListener('click', closeModal);
+
+
+        // Save mappings
+        function saveMappingAjax(updatedMapping) {
             $.ajax({
                 url: "<?= $module->getUrl('scripts/save_mappings.php') ?>",
                 method: "POST",
                 data: {
                     pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
                     redcap_csrf_token: <?= json_encode($csrf) ?>,
-                    "mappings": JSON.stringify(mapping),
-                    displayed: JSON.stringify(displayed)  // <-- Save which forms should be displayed
+                    "mappings": JSON.stringify(updatedMapping),
+                    displayed: JSON.stringify(Object.keys(updatedMapping))
                 },
-                success: function (result) {
-                    console.log("Checkpoint saved:", result);
-                },
-                error: function (xhr, status, error) {
-                    console.error("Error in checkpoint:", error, xhr.responseText);
-                }
+                success: () => window.location.reload(),
+                error: (xhr, status, error) => console.error("Error:", error)
             });
-
             closeModal();
-        });
-
-        // Handle "Delete Mapping"
-        document.getElementById('delete_btn').addEventListener('click', () => {
-            if (confirm(`Are you sure you want to delete the OnCore mapping for ${offender}? This cannot be undone.`)) {
-                delete mapping[offender];
-
-                // Send to server - include the displayed array
-                $.ajax({
-                    url: "<?= $module->getUrl('scripts/save_mappings.php') ?>",
-                    method: "POST",
-                    data: {
-                        pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
-                        redcap_csrf_token: <?= json_encode($csrf) ?>,
-                        "mappings": JSON.stringify(mapping),
-                        displayed: JSON.stringify(displayed)  // <-- Save which forms should be displayed
-                    },
-                    success: function (result) {
-                        console.log("Checkpoint saved:", result);
-                    },
-                    error: function (xhr, status, error) {
-                        console.error("Error in checkpoint:", error, xhr.responseText);
-                    }
-                });
-
-                closeModal();
-            }
-        });
-
-        // Close modal on Cancel or background click
-        document.getElementById('close_btn').addEventListener('click', () => closeModal());
-
-        modalOverlay.addEventListener('click', (event) => {
-            if (event.target === modalOverlay) closeModal();
-        });
+        }
     }
 
     function rebuild_from_mappings(instruments, dictionary, existingMappings) {
-        console.log('dictionary', dictionary);
-        console.log('existing mappings:', existingMappings);
-
         const container = document.getElementById('instruments_list');
         if (!container) return;
 
-        validity_check(existingMappings, dictionary);
+        // This checks the saved mappings to ensure they match up with available forms and fields in the project
+        validity_check(existingMappings, dictionary, instruments);
 
         // Create a fragment to build the tables in memory
         const fragment = document.createDocumentFragment();
@@ -624,6 +623,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
         });
 
         mappings = mapping;
+        mappings = sortMappings(mappings, instruments);
 
         // Send to server - include the displayed array
         $.ajax({
@@ -672,6 +672,9 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                 }
                 else {
                     mappings = result.data || {};
+                    mappings = sortMappings(mappings, instruments);
+                    displayed = Object.keys(mappings);
+/*
                     const savedDisplayed = result.displayed || []; // <-- Load the saved displayed list
 
                     displayed.length = 0;
@@ -680,7 +683,7 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
                         if (instruments[instrumentKey]) {
                             displayed.push(instrumentKey);
                         }
-                    });
+                    });*/
 
                     rebuild_from_mappings(instruments, dictionary, mappings);
                 }
@@ -861,6 +864,21 @@ $maxInputVars = ini_get('max_input_vars') ?: 1000;
 
             closeModal();
         });
+    }
+
+    // Sorts a mapping prior to save so that it is displayed in the same order as they appear in REDCap.
+    function sortMappings(mappings, instruments) {
+        const sortedMappings = {};
+
+        // Iterate through the instruments to enforce the correct order
+        for (const instrumentKey of Object.keys(instruments)) {
+            // If a mapping exists for this instrument, add it to our new object
+            if (mappings.hasOwnProperty(instrumentKey)) {
+                sortedMappings[instrumentKey] = mappings[instrumentKey];
+            }
+        }
+
+        return sortedMappings;
     }
 
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
