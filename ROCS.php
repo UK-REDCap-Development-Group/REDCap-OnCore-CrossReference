@@ -222,6 +222,7 @@ class ROCS extends AbstractExternalModule
         }
 
         if (self::isFieldMappingPage()) {
+            include 'scripts/scripts.php';
             $project_id = $_GET['pid'];
 
             $form = $this->getProjectSetting('form-id');
@@ -249,10 +250,14 @@ class ROCS extends AbstractExternalModule
         else if ($is_configured_sync_page) {
             include 'scripts/scripts.php';
             $mappings = $this->getProjectSetting('field-mappings');
+            // TODO: somehow on these pages, we likely want to check mappings. Maybe validity check is moved to run anytime the project is accessed.
+            // TODO: could keep a flag tracking when it has been checked and check that regularly based on project changes?
             ?>
+
             <script>
                 const dictionary = <?= json_encode($data_dict) ?>;
                 const mappings = <?= json_encode($mappings) ?>;
+                const instruments = <?= json_encode($instruments) ?>;
 
                 console.log('You are on a configured sync page.');
                 document.addEventListener('DOMContentLoaded', () => {
@@ -276,7 +281,8 @@ class ROCS extends AbstractExternalModule
 
                     sync_button.addEventListener('click', () => {
                         console.log('button clicked');
-                        syncByID('eirb_number');
+                        //syncByID('eirb_number');
+                        getOneFromREDCap();
                     });
                 });
             </script>
