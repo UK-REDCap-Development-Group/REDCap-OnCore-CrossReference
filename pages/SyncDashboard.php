@@ -2,6 +2,8 @@
 /** @var \ExternalModules\AbstractExternalModule $module */
 $page = "field-mapping";
 $instruments = REDCap::getInstrumentNames();
+
+include "scripts/scripts.php";
 ?>
 
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
@@ -27,66 +29,6 @@ $instruments = REDCap::getInstrumentNames();
     // TODO: fnc that builds records_list table from the flagged records saved in the config
     // TODO: fnc that loops the checker code from FieldMappings.php
     // TODO: fnc that fires when a record is selected to allow a user to adjudicate
-    function getFromREDCap(field, value) {
-        console.log('pressed');
-        $.ajax({
-            url: '<?= $module->getUrl("scripts/get_records.php") ?>',
-            data: {
-                'field': field,
-                'value': value
-            },
-            success: function (data) {
-                let record = data[0];
-                getFromOnCoreWithIRBNo(record);
-            },
-            error: function (xhr, status, error) {
-                console.error('Error fetching REDCap record:', error, xhr.responseText);
-            }
-        });
-    }
-
-    // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
-    function getFromOnCoreWithIRBNo(record) {
-        const protocol_number = record['irb_number']; // protocol #
-        const originals = {}; // keep a copy of original value of conflicting records
-        const updates = {}; // copy of selected conflicting values
-        $.ajax({
-            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocol_number}`,
-            method: "GET",
-            dataType: "json",
-            success: function (data) {
-                let dict = data[0];
-                console.log('OnCore data fetched for protocol:', dict);
-
-                // Collect all mismatches first
-                const comparisons = [];
-
-                Object.entries(mappings).forEach(([form, fields]) => {
-                    Object.entries(fields).forEach(([redcapField, oncoreField]) => {
-                        if (oncoreField === '') return;
-
-                        const redcapValue = record[redcapField];
-                        const oncoreValue = dict[oncoreField];
-
-                        originals[redcapField] = record[redcapField];
-
-                        if (redcapValue != oncoreValue) {
-                            comparisons.push({ redcapField, oncoreField, redcapValue, oncoreValue });
-                        } else if (!redcapValue && oncoreValue) {
-                            record[redcapField] = oncoreValue;
-                        }
-                    });
-                });
-
-                console.log('Record mapped with OnCore data: ', record);
-            },
-            error: function (xhr, status, error) {
-                console.error('Error fetching protocols:', error, xhr.responseText);
-            }
-        });
-
-        return record;
-    }
 
     /* Save an instance of adjudication for review */
     function trackInstance() {

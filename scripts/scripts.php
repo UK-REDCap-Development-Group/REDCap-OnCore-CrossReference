@@ -292,11 +292,11 @@ $csrf = $module->getCSRFToken();
                 let record = data[0];
                 console.log(data)
 
-                if (!record.eirb_number || record.eirb_number === "") {
-                    alert('Please input an eIRB number and ensure you save the record before attempting to synchronize with OnCore.');
+                if (!record.irb_number || record.irb_number === "") {
+                    alert('Please ensure to populate the IRB Number field SAVE the record before attempting to synchronize with OnCore.');
                     return;
                 }
-                getFromOnCoreWithIRBNo(record);
+                getFromOnCoreWithIRBNo(record, true);
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
@@ -333,15 +333,18 @@ $csrf = $module->getCSRFToken();
         // TODO: Come back and cleanup the references to comparisons, we're using that model moving forward
         const protocol_number = record['irb_number']; // protocol #
         const eirb_number = record['eirb_number']; // protocol #
-        console.log("eIRB Number for Request: " + eirb_number)
+        //console.log("eIRB Number for Request: " + eirb_number)
+        console.log("IRB Number/Protocol Number for Request: " + protocol_number)
 
         $.ajax({
-            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${eirb_number}`,
+            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocol_number}`,
             method: "GET",
             dataType: "json",
             success: function (data) {
                 console.log('Proxied OnCore protocol Request');
                 console.log(data);
+
+                let dict = data[0];
 
                 // Collect all mismatches first
                 const comparisons = [];
