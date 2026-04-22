@@ -283,7 +283,6 @@ $csrf = $module->getCSRFToken();
             id = urlParams.get('id');
         }
 
-
         $.ajax({
             url: '<?= $module->getUrl("scripts/get_record_by_id.php") ?>',
             data: {
@@ -292,6 +291,11 @@ $csrf = $module->getCSRFToken();
             success: function (data) {
                 let record = data[0];
                 console.log(data)
+
+                if (!record.eirb_number || record.eirb_number === "") {
+                    alert('Please input an eIRB number and ensure you save the record before attempting to synchronize with OnCore.');
+                    return;
+                }
                 getFromOnCoreWithIRBNo(record);
             },
             error: function (xhr, status, error) {
@@ -321,6 +325,7 @@ $csrf = $module->getCSRFToken();
 
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
     function getFromOnCoreWithIRBNo(record, show=false) {
+        console.log("getFromOnCoreWithIRBNo");
         console.log(record);
         if (!record) {
             return;
@@ -328,17 +333,15 @@ $csrf = $module->getCSRFToken();
         // TODO: Come back and cleanup the references to comparisons, we're using that model moving forward
         const protocol_number = record['irb_number']; // protocol #
         const eirb_number = record['eirb_number']; // protocol #
-        //console.log('protocol num' + protocol_number);
+        console.log("eIRB Number for Request: " + eirb_number)
 
         $.ajax({
-            //url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocol_number}`,
             url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${eirb_number}`,
             method: "GET",
             dataType: "json",
             success: function (data) {
-                let dict = data[0];
+                console.log('Proxied OnCore protocol Request');
                 console.log(data);
-                console.log('OnCore data fetched for protocol:', dict);
 
                 // Collect all mismatches first
                 const comparisons = [];
@@ -393,8 +396,8 @@ $csrf = $module->getCSRFToken();
                         else if (redcapValue === oncoreValue) {
                             let obj = {
                                 'field_name': redcapField,
-                                'redcap': { 'value': redcapValue, 'selected': true },
-                                'oncore': { 'value': oncoreValue, 'selected': true },
+                                'redcap': { 'value': redcapValue, 'selected': false }, // changed from true pair to false pair
+                                'oncore': { 'value': oncoreValue, 'selected': false }, // should solve previous highlighting bug
                                 'unmapped': false
                             };
                             comparisons.push(obj);
