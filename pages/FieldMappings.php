@@ -764,11 +764,18 @@ $eirb = $module->getProjectSetting('sample-eirb');
     // Load the saved checkpoint when the page is initialized
     document.addEventListener('DOMContentLoaded', async () => {
         try {
-            // First request for protocolId
-            const protocol = await safeFetchOncore('protocols', `&protocolNo=${protocolNo}`);
-            const protocolId = protocol.data?.protocolId;
+            if (eIRBno) {
+                /* If the eIRBno was provided, go for this */
+                const details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${eIRBno}`);
+                const protocolId = details.data?.protocolId;
+            }
+            else {
+                /* If they didn't provide eIRBno in settings, loop until we get a hit */
+                // TODO: check records until we get one that actually replies with something
+            }
 
             const api = {
+                protocols: `&protocolNo=${protocolId}`,
                 protocolSponsors: `&protocolId=${protocolId}`,
                 protocolStaff: `&protocolId=${protocolId}`,
                 protocolManagementDetails: `&protocolId=${protocolId}`,

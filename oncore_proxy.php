@@ -32,6 +32,13 @@ $queryString = http_build_query($params); // rebuild parameters into something w
 
 try {
     switch ($action) {
+        case 'protocolManagementDetails':
+            // GET
+            // Query string should be:  irbNo=
+            $response = $module->proxyPost("/protocolManagementDetails?$queryString");
+            echo $response;
+            break;
+
         case 'protocols':
             // GET
             // Query string should be: protocolId=
