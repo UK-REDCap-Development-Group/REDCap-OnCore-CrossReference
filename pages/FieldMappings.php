@@ -727,35 +727,24 @@ $eirb = $module->getProjectSetting('sample-eirb');
         });
     }
 
-    function getAllKeys(obj, prefix = '') {
-        let keys = [];
-
-        for (const key in obj) {
-            const value = obj[key];
-            const fullKey = prefix ? `${prefix}.${key}` : key;
-
-            keys.push(fullKey);
-
-            if (value && typeof value === "object") {
-                if (Array.isArray(value)) {
-                    value.forEach((item, i) => {
-                        if (typeof item === "object") {
-                            keys = keys.concat(getAllKeys(item, `${fullKey}[${i}]`));
-                        }
-                    });
-                } else {
-                    keys = keys.concat(getAllKeys(value, fullKey));
-                }
+    function get_eIRBs() {
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/get_eirbs.php") ?>',
+            success: function (data) {
+                // TODO: finish this looping to save records, then figure out how to run it in the background
+                console.log(data);
+            },
+            error: function (xhr, status, error) {
+                console.error('Error fetching REDCap record:', error, xhr.responseText);
             }
-        }
-
-        return keys;
+        });
     }
 
     // Load the saved checkpoint when the page is initialized
     document.addEventListener('DOMContentLoaded', async () => {
         try {
             console.log(eIRBno)
+            let details = null;
 
             let protocolId = null;
             let protocol = null; // Storing the base protocol data if needed later
@@ -763,7 +752,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
 
             if (eIRBno) {
                 /* Query the protocols endpoint using irbNo instead of protocolNo */
-                const details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${eIRBno}`);
+                details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${eIRBno}`);
                 console.log(details);
 
                 if (details.success && details.data) {
@@ -780,6 +769,33 @@ $eirb = $module->getProjectSetting('sample-eirb');
             else {
                 /* If they didn't provide eIRBno in settings, loop until we get a hit */
                 // TODO: check records until we get one that actually replies with something
+                let eirb_records = get_eIRBs();
+
+                for (const test_eirb of eirb_records) {
+                    console.log(`Trying eIRB number: ${test_eirb}...`);
+
+                    // Try fetching the protocol for the current eIRB in the loop
+                    details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${test_eirb}`);
+
+                    // Check if it succeeded AND actually returned data
+                    if (details && details.success && details.data) {
+                        console.log(`Success! Protocol details fetched for eIRB ${test_eirb}:`, details.data);
+
+                        protocol = details;
+                        // Assuming data is an object with protocolId. Adjust index if data is an array.
+                        protocolId = details.data['protocolId'];
+                        console.log("Found Protocol ID:", protocolId);
+
+                        // Break out of the loop immediately
+                        break;
+                    } else {
+                        console.warn(`No valid protocol found for eIRB ${test_eirb}. Moving to next...`);
+                    }
+                }
+
+                if (!protocolId) {
+                    console.error("Searched all eIRB records but could not find a valid protocol.");
+                }
             }
 
             /*
