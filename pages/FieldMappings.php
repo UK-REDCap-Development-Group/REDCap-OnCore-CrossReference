@@ -803,13 +803,15 @@ $eirb = $module->getProjectSetting('sample-eirb');
              */
             const api = {
                 protocols: `&protocolId=${protocolId}`,
+                protocolConsents: `&protocolId=${protocolId}`,
                 protocolSponsors: `&protocolId=${protocolId}`,
                 protocolStaff: `&protocolId=${protocolId}`,
+                protocolEprmsSubmissions: `&protocolId=${protocolId}`,
                 protocolPrmcReviews: `&protocolId=${protocolId}`,
-                protocolTasks: `&protocolId=${protocolId}`,
+                protocolIde: `&protocolId=${protocolId}`,
                 protocolInd: `&protocolId=${protocolId}`,
-                contactCredentials: `&contactId=${contactId}`
             };
+            // omitted tasks and contact because that information either requires another input, or seems to be duplicated
 
             // Run all remaining calls in parallel safely
             let requests = Object.entries(api).map(([endpoint, query]) =>
