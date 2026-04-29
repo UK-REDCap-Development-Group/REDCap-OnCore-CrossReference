@@ -834,9 +834,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
             all = Object.assign({}, ...allResponses);
             console.log(all);
 
-            oncore_fields = [
-                ...new Set(allResponses.flatMap(obj => getAllKeys(obj)))
-            ];
+            oncore_fields = Object.keys(all);
 
             // get values in alphabetical
             oncore_fields.sort();
