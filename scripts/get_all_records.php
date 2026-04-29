@@ -16,7 +16,7 @@ if (is_string($forms_input) && !empty($forms_input)) {
     $forms = [];
 }
 
-$filter = "[eirb_number] != '' AND [irb_number] != '' AND [sync(1)] <> 1";
+$filter = "[eirb_number] != '' AND [sync(1)] <> 1";
 
 // Define the base fields you always want
 $requested_fields = ['record_id', 'eirb_number', 'irb_number'];

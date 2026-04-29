@@ -731,7 +731,6 @@ $eirb = $module->getProjectSetting('sample-eirb');
         $.ajax({
             url: '<?= $module->getUrl("scripts/get_eirbs.php") ?>',
             success: function (data) {
-                // TODO: finish this looping to save records, then figure out how to run it in the background
                 console.log(data);
             },
             error: function (xhr, status, error) {

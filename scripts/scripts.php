@@ -337,13 +337,13 @@ $csrf = $module->getCSRFToken();
             return;
         }
         // TODO: Come back and cleanup the references to comparisons, we're using that model moving forward
-        const protocol_number = record['irb_number']; // protocol #
         const eirb_number = record['eirb_number']; // protocol #
         //console.log("eIRB Number for Request: " + eirb_number)
-        console.log("IRB Number/Protocol Number for Request: " + protocol_number)
+        console.log("IRB Number/Protocol Number for Request: " + eirb_number)
 
+        // TODO: replace this with a collection that mirrors that which runs at page load
         $.ajax({
-            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocols&protocolNo=${protocol_number}`,
+            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocolManagementDetails&irbNo=${eirb_number}`,
             method: "GET",
             dataType: "json",
             success: function (data) {
