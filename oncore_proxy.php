@@ -42,7 +42,8 @@ try {
         case 'protocols':
             // GET
             // Query string should be: protocolId=
-            $response = $module->proxyPost("/protocols?$queryString");
+            $queryString = explode('=', $queryString)[1];
+            $response = $module->proxyPost("/protocols/$queryString");
             echo $response;
             break;
 
@@ -70,7 +71,6 @@ try {
         case 'protocolPrmcReviews':
             // GET
             $response = $module->proxyPost("/protocolPrmcReviews?$queryString");
-            echo $queryString;
             echo $response;
             break;
 

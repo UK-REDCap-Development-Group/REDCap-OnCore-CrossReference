@@ -801,55 +801,36 @@ $eirb = $module->getProjectSetting('sample-eirb');
             /*
              * We started by getting a protocolId above, we use that to hit all accessible endpoints using protocolId
              */
-            const api_protocol_id = {
+            const api = {
+                protocols: `&protocolId=${protocolId}`,
                 protocolSponsors: `&protocolId=${protocolId}`,
                 protocolStaff: `&protocolId=${protocolId}`,
                 protocolPrmcReviews: `&protocolId=${protocolId}`,
                 protocolTasks: `&protocolId=${protocolId}`,
                 protocolInd: `&protocolId=${protocolId}`,
-            };
-
-            const api_contact_id = {
                 contactCredentials: `&contactId=${contactId}`
             };
 
             // Run all remaining calls in parallel safely
-            let requests = Object.entries(api_protocol_id).map(([endpoint, query]) =>
+            let requests = Object.entries(api).map(([endpoint, query]) =>
                 safeFetchOncore(endpoint, query)
             );
 
+            console.log(requests);
+
             let results = await Promise.all(requests);
 
+            console.log(results);
+
             // Combine successful results only
-            let allResponses = [protocol, ...results]
+            let allResponses = [{}, ...results]
                 .filter(r => r.success)
                 .map(r => r.data);
+
+            console.log('allResponses: ', allResponses);
 
             let all = Object.assign({}, ...allResponses);
-
-            /*
-             * Once we have a protocol number from above, we run the protocol number requests
-             */
-
-            protocolNo = all['sponsorProtocolNo'];
-            const api_protocol_no = {
-                protocols: `&protocolNo=${protocolNo}`,
-            };
-            requests = Object.entries(api_protocol_no).map(([endpoint, query]) =>
-               safeFetchOncore(endpoint, query)
-            );
-
-            results = await Promise.all(requests);
-
-            allResponses = [protocol, ...results]
-                .filter(r => r.success)
-                .map(r => r.data);
-
-            allResponses.push(all);
-
-            all = Object.assign({}, ...allResponses);
-            console.log(all);
-
+            console.log('all: ', all)
             oncore_fields = Object.keys(all);
 
             // get values in alphabetical
@@ -858,11 +839,9 @@ $eirb = $module->getProjectSetting('sample-eirb');
             console.log("All OnCore fields (successful only):", oncore_fields);
 
             load_checkpoint();
-
         } catch (err) {
             console.error("Unexpected OnCore loading failure:", err);
         }
-
 
         document.getElementById('sync-btn').addEventListener('click', () => {
             //getOneFromREDCap('eirb_number', eIRBno); // single record test

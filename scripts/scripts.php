@@ -307,10 +307,16 @@ $csrf = $module->getCSRFToken();
     // Simple oncore request for page render, additional query defaults to null
     function fetchOncore(protocol, query='') {
         return $.ajax({
-            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=${protocol}${query}`,
-            method: "GET",
-            dataType: "json"
-        }).then(data => data[0]);
+                url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=${protocol}${query}`,
+                method: "GET",
+                dataType: "json"
+            }).then(data => {
+                if (Array.isArray(data)) {
+                    return data.length > 0 ? data[0] : {};
+                }
+
+                return data || {};
+            });
     }
 
     // Even if a request fails, I still want the site to load
