@@ -316,7 +316,7 @@ $csrf = $module->getCSRFToken();
     // Even if a request fails, I still want the site to load
     function safeFetchOncore(protocol, query='') {
         return fetchOncore(protocol, query)
-            .then(data => ({ success: true, data }))
+            .then(data => ({ success: true, data: data }))
             .catch(err => {
                 console.error(`Failed endpoint: ${protocol}`, err.responseText || err);
                 return { success: false, data: null };

@@ -20,16 +20,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
     let oncore_fields = null;
     const toSave = {}; // this stores adjudicates and saves them to config
 
-    const protocolNo = <?= json_encode($protocol[0]) ?>;
     const eIRBno = <?= json_encode($eirb[0]) ?>;
-
-    if (!protocolNo) {
-        alert("CONFIG ERROR: Please visit external module settings and provide a sample Protocol Number.")
-    }
-
-    if (!eIRBno) {
-        alert("CONFIG ERROR: Please visit external module settings and provide a sample eIRB Number.")
-    }
 
     let mappings = false;
     const contactId = ''; // not sure where I might find this
@@ -764,38 +755,84 @@ $eirb = $module->getProjectSetting('sample-eirb');
     // Load the saved checkpoint when the page is initialized
     document.addEventListener('DOMContentLoaded', async () => {
         try {
+            console.log(eIRBno)
+
+            let protocolId = null;
+            let protocol = null; // Storing the base protocol data if needed later
+            let protocolNo = null;
+
             if (eIRBno) {
-                /* If the eIRBno was provided, go for this */
+                /* Query the protocols endpoint using irbNo instead of protocolNo */
                 const details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${eIRBno}`);
-                const protocolId = details.data?.protocolId;
+                console.log(details);
+
+                if (details.success && details.data) {
+                    console.log("Protocol details fetched by eIRB:", details.data);
+                    protocol = details;
+                    // Assuming data is an object with protocolId. If proxy returns an array,
+                    // you might need details.data[0].protocolId depending on how you parse it.
+                    protocolId = details.data['protocolId'];
+                    console.log("Found Protocol ID:", protocolId);
+                } else {
+                    console.warn("Could not find a protocol with that eIRB number.");
+                }
             }
             else {
                 /* If they didn't provide eIRBno in settings, loop until we get a hit */
                 // TODO: check records until we get one that actually replies with something
             }
 
-            const api = {
-                protocols: `&protocolNo=${protocolId}`,
+            /*
+             * We started by getting a protocolId above, we use that to hit all accessible endpoints using protocolId
+             */
+            const api_protocol_id = {
                 protocolSponsors: `&protocolId=${protocolId}`,
                 protocolStaff: `&protocolId=${protocolId}`,
-                protocolManagementDetails: `&protocolId=${protocolId}`,
                 protocolPrmcReviews: `&protocolId=${protocolId}`,
                 protocolTasks: `&protocolId=${protocolId}`,
                 protocolInd: `&protocolId=${protocolId}`,
+            };
+
+            const api_contact_id = {
                 contactCredentials: `&contactId=${contactId}`
             };
 
             // Run all remaining calls in parallel safely
-            const requests = Object.entries(api).map(([endpoint, query]) =>
+            let requests = Object.entries(api_protocol_id).map(([endpoint, query]) =>
                 safeFetchOncore(endpoint, query)
             );
 
-            const results = await Promise.all(requests);
+            let results = await Promise.all(requests);
 
             // Combine successful results only
-            const allResponses = [protocol, ...results]
+            let allResponses = [protocol, ...results]
                 .filter(r => r.success)
                 .map(r => r.data);
+
+            let all = Object.assign({}, ...allResponses);
+
+            /*
+             * Once we have a protocol number from above, we run the protocol number requests
+             */
+
+            protocolNo = all['sponsorProtocolNo'];
+            const api_protocol_no = {
+                protocols: `&protocolNo=${protocolNo}`,
+            };
+            requests = Object.entries(api_protocol_no).map(([endpoint, query]) =>
+               safeFetchOncore(endpoint, query)
+            );
+
+            results = await Promise.all(requests);
+
+            allResponses = [protocol, ...results]
+                .filter(r => r.success)
+                .map(r => r.data);
+
+            allResponses.push(all);
+
+            all = Object.assign({}, ...allResponses);
+            console.log(all);
 
             oncore_fields = [
                 ...new Set(allResponses.flatMap(obj => getAllKeys(obj)))
