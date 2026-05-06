@@ -6,8 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="f740906d-bd68-4891-9807-9142297f32e9" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.zip" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/pages/FieldMappings.php" beforeDir="false" afterPath="$PROJECT_DIR$/pages/FieldMappings.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/get_all_records.php" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/get_all_records.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/scripts.php" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/scripts.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -37,21 +37,21 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "automation",
-    "last_opened_file_path": "C:/Projects/redcap dev docker/redcap/modules_dev/REDCap-OnCore-CrossReference_v0.0.0/scripts",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;automation&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Projects/redcap dev docker/redcap/modules_dev/REDCap-OnCore-CrossReference_v0.0.0/scripts&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Projects\redcap dev docker\redcap\modules_dev\REDCap-OnCore-CrossReference_v0.0.0\scripts" />
@@ -89,6 +89,7 @@
       <workItem from="1776190647226" duration="10904000" />
       <workItem from="1776351538659" duration="24712000" />
       <workItem from="1777469433167" duration="7448000" />
+      <workItem from="1778074899567" duration="1263000" />
     </task>
     <servers />
   </component>

@@ -304,6 +304,29 @@ $csrf = $module->getCSRFToken();
         });
     }
 
+    // Looping version of above fnc
+    function getAllFromREDCap() {
+        console.log(displayed);
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/get_all_records.php") ?>',
+            data: {
+                forms: displayed
+            },
+            success: function (data) {
+                // TODO: finish this looping to save records, then figure out how to run it in the background
+                console.log(data);
+                data.forEach(record => {
+                    console.log(record);
+                    getFromOnCoreWithIRBNo(record);
+                });
+                console.log(toSave);
+            },
+            error: function (xhr, status, error) {
+                console.error('Error fetching REDCap record:', error, xhr.responseText);
+            }
+        });
+    }
+
     // Simple oncore request for page render, additional query defaults to null
     function fetchOncore(protocol, query='') {
         return $.ajax({
@@ -444,5 +467,35 @@ $csrf = $module->getCSRFToken();
         });
 
         return record;
+    }
+
+    function get_eIRBs() {
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/get_eirbs.php") ?>',
+            success: function (data) {
+                console.log(data);
+            },
+            error: function (xhr, status, error) {
+                console.error('Error fetching REDCap record:', error, xhr.responseText);
+            }
+        });
+    }
+
+    // Runs a request to a script saving comparisons to the config
+    function track_adjudicates() {
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/track_adjudicates.php") ?>',
+            data: {
+                'comparisons': toSave
+            },
+            success: function (data) {
+                console.log(data.message);
+                console.log(data.data);
+
+            },
+            error: function (xhr, status, error) {
+                console.error('Error saving comparisons:', error, xhr.responseText);
+            }
+        });
     }
 </script>
