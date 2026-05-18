@@ -5,6 +5,8 @@ use ExternalModules\AbstractExternalModule;
 $module = ExternalModules::getModuleInstance('REDCap-OnCore-CrossReference'); // replace with your module directory
 
 $csrf = $module->getCSRFToken();
+
+$webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 ?>
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
 <script>
@@ -74,6 +76,7 @@ $csrf = $module->getCSRFToken();
         const built = buildModal();
         const { modalOverlay, modalBox } = built;
 
+        let app_path_webroot = <?= json_encode($webroot)?>;
         let modalContent = `
             <h1>Adjudication for Record <a href="${app_path_webroot}DataEntry/record_home.php?pid=${pid}&id=${record.record_id}" target="_blank" class="hyperlink">${record.record_id}</a></h1>
             <h3>Please select which data you would like to save: REDCap or OnCore.</h3>
@@ -462,6 +465,9 @@ $csrf = $module->getCSRFToken();
                 console.log('Record mapped with OnCore data: ', record);
             },
             error: function (xhr, status, error) {
+                if (xhr.responseJSON.code === 503) {
+                    $(`<div title="Service Unavailable">OnCore reported a server error. OnCore is likely down right now. Please try again later, or contact your OnCore admin if the issue persists.</div>`).dialog();
+                }
                 console.error('Error fetching protocols:', error, xhr.responseText);
             }
         });

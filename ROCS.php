@@ -15,6 +15,14 @@ class ROCS extends AbstractExternalModule
         $init = $this->getProjectSetting('init');
 
         if (!$init) {
+            $host = $_SERVER['HTTP_HOST'];
+
+            // Set the urls automatically to UK OnCore if we are on a UK domain
+            if (preg_match("/\.uky\.edu/", $host)) {
+                $this->setProjectSetting('oncore-token-url', 'https://uky-oncore-prod.forteresearchapps.com/forte-platform-web/api/oauth/token');
+                $this->setProjectSetting('oncore-api-url', 'https://uky-oncore-prod.forteresearchapps.com/oncore-api/rest/');
+            }
+
             $instruments = REDCap::getInstrumentNames();
 
             if (array_key_exists('demographics', $instruments) && array_key_exists('regulatory', $instruments)) {
@@ -80,6 +88,7 @@ class ROCS extends AbstractExternalModule
             http_response_code(500);
             echo json_encode([
                 'error' => 'Request failed',
+                'code' => $e->getCode(),
                 'message' => $e->getMessage(),
             ]);
         }
@@ -250,14 +259,15 @@ class ROCS extends AbstractExternalModule
         else if ($is_configured_sync_page) {
             include 'scripts/scripts.php';
             $mappings = $this->getProjectSetting('field-mappings');
-            // TODO: somehow on these pages, we likely want to check mappings. Maybe validity check is moved to run anytime the project is accessed.
-            // TODO: could keep a flag tracking when it has been checked and check that regularly based on project changes?
+            $page = $_GET['page'];
+            $mapping_page = $this->getUrl('pages/FieldMappings.php');
             ?>
-
             <script>
                 const dictionary = <?= json_encode($data_dict) ?>;
                 const mappings = <?= json_encode($mappings) ?>;
                 const instruments = <?= json_encode($instruments) ?>;
+                const page = <?= json_encode($page) ?>;
+                const hyperlink = <?= json_encode($mapping_page) ?>;
 
                 console.log('You are on a configured sync page.');
                 document.addEventListener('DOMContentLoaded', () => {
@@ -265,9 +275,10 @@ class ROCS extends AbstractExternalModule
                     const modify = container.children[1];
 
                     const sync_button = document.createElement('button');
+                    sync_button.type = 'button';
                     sync_button.id = 'sync_button';
                     sync_button.classList = 'jqbuttonmed ui-button ui-corner-all ui-widget';
-                    sync_button.style = 'color:#444;';
+                    sync_button.style = 'color:#0096FF;';
                     sync_button.innerHTML = `
                     <i class='fas fa-arrows-rotate'></i>
                     <span>Sync Record with OnCore</span>
@@ -281,8 +292,14 @@ class ROCS extends AbstractExternalModule
 
                     sync_button.addEventListener('click', () => {
                         console.log('button clicked');
-                        //syncByID('eirb_number');
-                        getOneFromREDCap();
+                        console.log(page);
+                        console.log(mappings);
+                        if (mappings.hasOwnProperty(page)) {
+                            getOneFromREDCap();
+                        }
+                        else {
+                            $(`<div title="Mapping Error">No fields are mapped for this Form. Please visit the <a href='${hyperlink}' target="_blank">Field Mappings</a> page to configure mappings between this Form and OnCore.</div>`).dialog();
+                        }
                     });
                 });
             </script>
