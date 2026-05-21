@@ -10,6 +10,17 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 ?>
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
 <script>
+    const buildAPI = (protocolId) => ({
+        protocols: `&protocolId=${protocolId}`,
+        protocolConsents: `&protocolId=${protocolId}`,
+        protocolSponsors: `&protocolId=${protocolId}`,
+        protocolStaff: `&protocolId=${protocolId}`,
+        protocolEprmsSubmissions: `&protocolId=${protocolId}`,
+        protocolPrmcReviews: `&protocolId=${protocolId}`,
+        protocolIde: `&protocolId=${protocolId}`,
+        protocolInd: `&protocolId=${protocolId}`,
+    });
+
     /* Create the basic modal structure */
     function buildModal() {
         if (document.getElementById('modal-overlay')) {
@@ -300,7 +311,15 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                     alert('Please ensure to populate the IRB Number field SAVE the record before attempting to synchronize with OnCore.');
                     return;
                 }
-                getFromOnCoreWithIRBNo(record, true);
+
+                let adjudicate = null;
+
+                // Loop through the api object created above, but ensure you provide it an eirb_number
+                Object.entries(buildAPI(record.eirb_number)).forEach(([protocol, query]) => {
+                    console.log(protocol)
+                    console.log(query)
+                    adjudicate = getFromOnCoreWithIRBNo(record, protocol, query, true);
+                });
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
@@ -336,7 +355,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
         return $.ajax({
                 url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=${protocol}${query}`,
                 method: "GET",
-                dataType: "json"
+                dataType: "json",
             }).then(data => {
                 if (Array.isArray(data)) {
                     return data.length > 0 ? data[0] : {};
@@ -357,19 +376,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
     }
 
     // Use above function to hit multiple endpoints in a loop
-    async function safeFetchOncoreAll(
-        protocolId,
-        api = {
-            protocols: `&protocolId=${protocolId}`,
-            protocolConsents: `&protocolId=${protocolId}`,
-            protocolSponsors: `&protocolId=${protocolId}`,
-            protocolStaff: `&protocolId=${protocolId}`,
-            protocolEprmsSubmissions: `&protocolId=${protocolId}`,
-            protocolPrmcReviews: `&protocolId=${protocolId}`,
-            protocolIde: `&protocolId=${protocolId}`,
-            protocolInd: `&protocolId=${protocolId}`,
-        },
-    ) {
+    async function safeFetchOncoreAll(protocolId, api=api(protocolId)) {
         // Map over the API object, but keep the 'endpoint' attached to the result
         let requests = Object.entries(api).map(async ([endpoint, query]) => {
             let response = await safeFetchOncore(endpoint, query);
@@ -402,7 +409,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
     }
 
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
-    function getFromOnCoreWithIRBNo(record, show=false) {
+    function getFromOnCoreWithIRBNo(record, protocol, query, show=false) {
         console.log("getFromOnCoreWithIRBNo Ran");
         console.log(record);
         if (!record) {
@@ -417,7 +424,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 
         // TODO: replace this with a collection that mirrors that which runs at page load, meaning it needs to loop through mapped endpoints, but only those mapped ones
         $.ajax({
-            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocolManagementDetails&irbNo=${eirb_number}`,
+            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=${protocol}${query}`,
             method: "GET",
             dataType: "json",
             success: function (data) {
@@ -462,7 +469,6 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                             form_data.push(obj);
                             return;
                         }
-
                         if (!redcapValue && oncoreValue) {
                             let obj = {
                                 'field_name': redcapField,

@@ -771,7 +771,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
             }
 
             // Optional field object this is a protocol/query pair. Default value suits our case, you can see it in scripts.php
-            oncore_fields = await safeFetchOncoreAll(protocolId);
+            oncore_fields = await safeFetchOncoreAll(protocolId, buildAPI(protocolId));
 
             console.log("All OnCore fields (successful only):", oncore_fields);
 
