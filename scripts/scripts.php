@@ -281,6 +281,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 
     // Single record syncing function
     function getOneFromREDCap(id = false) {
+        console.log('getOneFromREDCap Ran')
         if (!id) {
             const urlParams = new URLSearchParams(window.location.search);
             id = urlParams.get('id');
@@ -355,19 +356,63 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
             });
     }
 
+    // Use above function to hit multiple endpoints in a loop
+    async function safeFetchOncoreAll(
+        protocolId,
+        api = {
+            protocols: `&protocolId=${protocolId}`,
+            protocolConsents: `&protocolId=${protocolId}`,
+            protocolSponsors: `&protocolId=${protocolId}`,
+            protocolStaff: `&protocolId=${protocolId}`,
+            protocolEprmsSubmissions: `&protocolId=${protocolId}`,
+            protocolPrmcReviews: `&protocolId=${protocolId}`,
+            protocolIde: `&protocolId=${protocolId}`,
+            protocolInd: `&protocolId=${protocolId}`,
+        },
+    ) {
+        // Map over the API object, but keep the 'endpoint' attached to the result
+        let requests = Object.entries(api).map(async ([endpoint, query]) => {
+            let response = await safeFetchOncore(endpoint, query);
+            return { endpoint, response };
+        });
+
+        let results = await Promise.all(requests);
+
+        // Build a registry mapping each field to its endpoint
+        let fieldRegistry = {};
+
+        results.forEach(({ endpoint, response }) => {
+            if (response.success && response.data) {
+                Object.keys(response.data).forEach(field => {
+                    // Map the field name to its origin endpoint
+                    fieldRegistry[field] = endpoint;
+                });
+            }
+        });
+
+        // Create an alphabetized array of objects for easy UI rendering/referencing
+        let oncore_fields = Object.keys(fieldRegistry)
+            .sort()
+            .map(field => ({
+                field: field,
+                endpoint: fieldRegistry[field]
+            }));
+
+        return oncore_fields;
+    }
+
     // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
     function getFromOnCoreWithIRBNo(record, show=false) {
-        console.log("getFromOnCoreWithIRBNo");
+        console.log("getFromOnCoreWithIRBNo Ran");
         console.log(record);
         if (!record) {
             return;
         }
-        // TODO: Come back and cleanup the references to comparisons, we're using that model moving forward
+
         const eirb_number = record['eirb_number']; // protocol #
-        //console.log("eIRB Number for Request: " + eirb_number)
         console.log("IRB Number/Protocol Number for Request: " + eirb_number)
 
-        // TODO: replace this with a collection that mirrors that which runs at page load
+        // TODO: replace this with a collection that mirrors that which runs at page load, meaning it needs to loop through mapped endpoints, but only those mapped ones
         $.ajax({
             url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocolManagementDetails&irbNo=${eirb_number}`,
             method: "GET",
@@ -379,7 +424,6 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                 let dict = data[0];
 
                 // Collect all mismatches first
-                const comparisons = [];
                 const experimental = {};
 
                 Object.entries(mappings).forEach(([form, fields]) => {
@@ -402,7 +446,6 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                                 'oncore': { 'value': oncoreValue, 'selected': false },
                                 'unmapped': true
                             };
-                            comparisons.push(obj);
                             form_data.push(obj);
                             return;
                         }
@@ -413,7 +456,6 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                                 'oncore': { 'value': '', 'selected': false },
                                 'unmapped': true
                             };
-                            comparisons.push(obj);
                             form_data.push(obj);
                             return;
                         }
@@ -425,7 +467,6 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                                 'oncore': { 'value': oncoreValue, 'selected': true },
                                 'unmapped': false
                             };
-                            comparisons.push(obj);
                             form_data.push(obj);
                         }
                         else if (redcapValue === oncoreValue) {
@@ -435,7 +476,6 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                                 'oncore': { 'value': oncoreValue, 'selected': false }, // should solve previous highlighting bug
                                 'unmapped': false
                             };
-                            comparisons.push(obj);
                             form_data.push(obj);
                         }
                         else {
@@ -445,7 +485,6 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                                 'oncore': { 'value': oncoreValue, 'selected': false },
                                 'unmapped': false
                             };
-                            comparisons.push(obj);
                             form_data.push(obj);
                         }
                     });

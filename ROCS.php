@@ -282,8 +282,8 @@ class ROCS extends AbstractExternalModule
                     sync_button.innerHTML = `
                     <i class='fas fa-arrows-rotate'></i>
                     <span>Sync Record with OnCore</span>
-                `;
-
+                `
+                    console.log('building ma button')
                     if (modify) {
                         container.insertBefore(sync_button, modify.nextSibling);
                     } else {
@@ -291,10 +291,11 @@ class ROCS extends AbstractExternalModule
                     }
 
                     sync_button.addEventListener('click', () => {
-                        console.log('button clicked');
+                        console.log('sync_button clicked');
                         console.log(page);
                         console.log(mappings);
                         if (mappings.hasOwnProperty(page)) {
+                            console.log("Getting ready to run getOneFromREDCap from scripts.php")
                             getOneFromREDCap();
                         }
                         else {

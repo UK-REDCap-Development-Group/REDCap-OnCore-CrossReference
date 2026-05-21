@@ -311,10 +311,11 @@ $eirb = $module->getProjectSetting('sample-eirb');
 
                     const selectEl = row.querySelector('select');
                     if (Array.isArray(oncore_fields)) {
-                        oncore_fields.forEach(field => {
+                        oncore_fields.forEach((obj) => {
                             const option = document.createElement('option');
-                            option.value = field;
-                            option.textContent = field;
+                            option.value = obj.field;
+                            option.textContent = obj.field;
+                            option['data-protocol'] = obj.endpoint;
                             selectEl.appendChild(option);
                         });
                     }
@@ -514,13 +515,14 @@ $eirb = $module->getProjectSetting('sample-eirb');
                 // Populate select with oncore_fields
                 const selectEl = row.querySelector('select');
                 if (Array.isArray(oncore_fields)) {
-                    oncore_fields.forEach(field => {
+                    oncore_fields.forEach((obj) => {
                         const option = document.createElement('option');
-                        option.value = field;
-                        option.textContent = field;
+                        option.value = obj.field;
+                        option.textContent = obj.field;
+                        option['data-protocol'] = obj.endpoint;
 
                         // mark selected if it matches the saved mapping
-                        if (mappedFields[redcapField].mapping === field) option.selected = true;
+                        if (mappedFields[redcapField].mapping === obj.field) option.selected = true;
 
                         selectEl.appendChild(option);
                     });
@@ -533,8 +535,6 @@ $eirb = $module->getProjectSetting('sample-eirb');
                 fragment.appendChild(table);
                 i++;
             });
-
-
         });
 
         // Clear the container (removes the loader) and append all tables
@@ -542,6 +542,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
         container.appendChild(fragment);
     }
 
+    // Save a snapshot of configurations whenever you want, currently runs on any change
     function checkpoint() {
         console.log('checkpoint')
         const mapping = {};
@@ -556,6 +557,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
 
                 const redcapField = select.name;
                 const selectedValue = select.value;
+                const protocol = select['data-protocol'];
 
                 const row = select.closest('tr');
                 const checkbox = row?.querySelector('.include-unmapped');
@@ -573,7 +575,8 @@ $eirb = $module->getProjectSetting('sample-eirb');
 
                 instrumentMapping[redcapField] = {
                     mapping: selectedValue,
-                    include_unmapped: includeUnmapped
+                    include_unmapped: includeUnmapped,
+                    protocol: protocol,
                 };
             });
 
@@ -763,45 +766,8 @@ $eirb = $module->getProjectSetting('sample-eirb');
                 }
             }
 
-            /*
-             * We started by getting a protocolId above, we use that to hit all accessible endpoints using protocolId
-             */
-            const api = {
-                protocols: `&protocolId=${protocolId}`,
-                protocolConsents: `&protocolId=${protocolId}`,
-                protocolSponsors: `&protocolId=${protocolId}`,
-                protocolStaff: `&protocolId=${protocolId}`,
-                protocolEprmsSubmissions: `&protocolId=${protocolId}`,
-                protocolPrmcReviews: `&protocolId=${protocolId}`,
-                protocolIde: `&protocolId=${protocolId}`,
-                protocolInd: `&protocolId=${protocolId}`,
-            };
-            // omitted tasks and contact because that information either requires another input, or seems to be duplicated
-
-            // Run all remaining calls in parallel safely
-            let requests = Object.entries(api).map(([endpoint, query]) =>
-                safeFetchOncore(endpoint, query)
-            );
-
-            console.log(requests);
-
-            let results = await Promise.all(requests);
-
-            console.log(results);
-
-            // Combine successful results only
-            let allResponses = [{}, ...results]
-                .filter(r => r.success)
-                .map(r => r.data);
-
-            console.log('allResponses: ', allResponses);
-
-            let all = Object.assign({}, ...allResponses);
-            console.log('all: ', all)
-            oncore_fields = Object.keys(all);
-
-            // get values in alphabetical
-            oncore_fields.sort();
+            // Optional field object this is a protocol/query pair. Default value suits our case, you can see it in scripts.php
+            oncore_fields = await safeFetchOncoreAll(protocolId);
 
             console.log("All OnCore fields (successful only):", oncore_fields);
 
@@ -811,7 +777,6 @@ $eirb = $module->getProjectSetting('sample-eirb');
         }
 
         document.getElementById('sync-btn').addEventListener('click', () => {
-            //getOneFromREDCap('eirb_number', eIRBno); // single record test
             getAllFromREDCap();
         });
 
