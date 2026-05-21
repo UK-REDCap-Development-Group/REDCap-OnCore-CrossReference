@@ -412,6 +412,9 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
         const eirb_number = record['eirb_number']; // protocol #
         console.log("IRB Number/Protocol Number for Request: " + eirb_number)
 
+        console.log('Mappings:');
+        console.log(mappings);
+
         // TODO: replace this with a collection that mirrors that which runs at page load, meaning it needs to loop through mapped endpoints, but only those mapped ones
         $.ajax({
             url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=protocolManagementDetails&irbNo=${eirb_number}`,

@@ -63,7 +63,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
                      </td>
                      <td style='width: 50% !important;'>
                          <select name='${key2}' id='${key2}'>
-                            <option value="">None</option>
+                            <option value="" data-protocol="">None</option>
                          </select>
                      </td>`;
 
@@ -315,7 +315,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
                             const option = document.createElement('option');
                             option.value = obj.field;
                             option.textContent = obj.field;
-                            option['data-protocol'] = obj.endpoint;
+                            option.setAttribute('data-protocol', obj.endpoint);
                             selectEl.appendChild(option);
                         });
                     }
@@ -519,7 +519,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
                         const option = document.createElement('option');
                         option.value = obj.field;
                         option.textContent = obj.field;
-                        option['data-protocol'] = obj.endpoint;
+                        option.setAttribute('data-protocol', obj.endpoint);
 
                         // mark selected if it matches the saved mapping
                         if (mappedFields[redcapField].mapping === obj.field) option.selected = true;
@@ -557,7 +557,10 @@ $eirb = $module->getProjectSetting('sample-eirb');
 
                 const redcapField = select.name;
                 const selectedValue = select.value;
-                const protocol = select['data-protocol'];
+
+                // Grab the protocol from the selected option
+                const selectedOption = select.options[select.selectedIndex];
+                const protocol = selectedOption ? selectedOption.dataset.protocol : null;
 
                 const row = select.closest('tr');
                 const checkbox = row?.querySelector('.include-unmapped');
@@ -570,13 +573,14 @@ $eirb = $module->getProjectSetting('sample-eirb');
                     instrument,
                     redcapField,
                     selectedValue,
+                    protocol,
                     includeUnmapped
                 );
 
                 instrumentMapping[redcapField] = {
                     mapping: selectedValue,
                     include_unmapped: includeUnmapped,
-                    protocol: protocol,
+                    protocol: protocol, // This will now save correctly
                 };
             });
 
