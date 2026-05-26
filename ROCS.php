@@ -266,7 +266,7 @@ class ROCS extends AbstractExternalModule
                 const dictionary = <?= json_encode($data_dict) ?>;
                 const mappings = <?= json_encode($mappings) ?>;
                 const instruments = <?= json_encode($instruments) ?>;
-                const page = <?= json_encode($page) ?>;
+                const current_page = <?= json_encode($page) ?>;
                 const hyperlink = <?= json_encode($mapping_page) ?>;
 
                 console.log('You are on a configured sync page.');
@@ -292,11 +292,11 @@ class ROCS extends AbstractExternalModule
 
                     sync_button.addEventListener('click', () => {
                         console.log('sync_button clicked');
-                        console.log(page);
+                        console.log(current_page);
                         console.log(mappings);
-                        if (mappings.hasOwnProperty(page)) {
-                            console.log("Getting ready to run getOneFromREDCap from scripts.php")
-                            getOneFromREDCap();
+                        if (mappings.hasOwnProperty(current_page)) {
+                            console.log("Getting ready to run singleRecordSync from scripts.php")
+                            singleRecordSync();
                         }
                         else {
                             $(`<div title="Mapping Error">No fields are mapped for this Form. Please visit the <a href='${hyperlink}' target="_blank">Field Mappings</a> page to configure mappings between this Form and OnCore.</div>`).dialog();

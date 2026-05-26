@@ -244,3 +244,7 @@ table.dataTable tbody tr.highlight td {
     text-decoration: underline !important;
     color: #0000EE !important;
 }
+
+.disabled-cell {
+    background-color: green !important;
+}

@@ -87,9 +87,9 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
         const built = buildModal();
         const { modalOverlay, modalBox } = built;
 
-        let app_path_webroot = <?= json_encode($webroot)?>;
+        let webroot = <?= json_encode($webroot)?>;
         let modalContent = `
-            <h1>Adjudication for Record <a href="${app_path_webroot}DataEntry/record_home.php?pid=${pid}&id=${record.record_id}" target="_blank" class="hyperlink">${record.record_id}</a></h1>
+            <h1>Adjudication for Record <a href="${webroot}DataEntry/record_home.php?pid=${pid}&id=${record.record_id}" target="_blank" class="hyperlink">${record.record_id}</a></h1>
             <h3>Please select which data you would like to save: REDCap or OnCore.</h3>
             <hr>
             <div class="modal-comparison-grid">
@@ -113,37 +113,44 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                     <tbody style='overflow-y: auto;'>
                     <td>record_id</td>
                     <td>Record ID</td>
-                    <td><a href="${app_path_webroot}DataEntry/record_home.php?pid=${pid}&id=${record.record_id}" target="_blank" class="hyperlink">${record.record_id}</a></td>
+                    <td><a href="${webroot}DataEntry/record_home.php?pid=${pid}&id=${record.record_id}" target="_blank" class="hyperlink">${record.record_id}</a></td>
                     <td>N/A</td>
-`
+            `;
+
             comparisons[form].forEach((set, i) => {
-                console.log(set)
+                // console.log(set)
                 const field = set.field_name;
                 const redcapValue = set.redcap.value ?? 'N/A';
                 const oncoreValue = set.oncore.value ?? 'N/A';
-                console.log(set);
 
-                if (!set.unmapped) {
+                // Define  visual and interactive states
+                const isUnmapped = set.unmapped;
+                const isMatched = redcapValue === oncoreValue;
+
+                // Only interactive if it is mapped AND the values actually differ
+                const isInteractive = !isUnmapped && !isMatched;
+
+                if (!isUnmapped) {
                     if (set.redcap.selected) {
                         selectedValues[field] = redcapValue;
-                    }
-                    else if (set.oncore.selected) {
+                    } else if (set.oncore.selected) {
                         selectedValues[field] = oncoreValue;
                     }
                 }
 
+                // Inject into the table, using `isInteractive` to decide the HTML
                 modalContent += `
-                <tr data-field="${field}">
-                    <td>${field}</td>
-                    <td>${dictionary[form][field].field_label}</td>
-                    ${!set.unmapped
+                    <tr data-field="${field}">
+                        <td>${field}</td>
+                        <td>${dictionary[form][field].field_label}</td>
+                        ${isInteractive
                     ? `<td class="selectable-cell ${set.redcap.selected ? 'selected' : ''}" data-source="${redcapValue}">${redcapValue}</td>
-                           <td class="selectable-cell ${set.oncore.selected ? 'selected' : ''}" data-source="${oncoreValue}">${oncoreValue}</td>`
-                    : `<td>${redcapValue}</td>
-                           <td>${oncoreValue}</td>`
+                               <td class="selectable-cell ${set.oncore.selected ? 'selected' : ''}" data-source="${oncoreValue}">${oncoreValue}</td>`
+                    : `<td class="disabled-cell">${redcapValue}</td>
+                               <td class="disabled-cell">${oncoreValue}</td>`
                 }
-                </tr>
-                `;
+                    </tr>
+                    `;
             });
             modalContent += `
                         </tbody>
@@ -151,7 +158,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                     <button id="overwrite">Save Selected Data to REDCap</button>
                 </div>
             `;
-        })
+        });
 
         modalBox.innerHTML = modalContent;
         modalOverlay.appendChild(modalBox);
@@ -209,6 +216,9 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
             });
 
             closeModal();
+
+            // Force a reload so that we see updated record info
+            window.location.reload();
         });
     }
 
@@ -290,9 +300,8 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
         });
     }
 
-    // Single record syncing function
-    function getOneFromREDCap(id = false) {
-        console.log('getOneFromREDCap Ran')
+    async function singleRecordSync(id = false) {
+        console.log('singleRecordSync Ran');
         if (!id) {
             const urlParams = new URLSearchParams(window.location.search);
             id = urlParams.get('id');
@@ -300,26 +309,47 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 
         $.ajax({
             url: '<?= $module->getUrl("scripts/get_record_by_id.php") ?>',
-            data: {
-                'record_id': id
-            },
-            success: function (data) {
+            data: { 'record_id': id },
+            success: async function (data) {
+                let protocolId = null;
                 let record = data[0];
-                console.log(data)
 
-                if (!record.irb_number || record.irb_number === "") {
-                    alert('Please ensure to populate the IRB Number field SAVE the record before attempting to synchronize with OnCore.');
+                if (!record.eirb_number || record.eirb_number === "") {
+                    alert('Please ensure to populate the IRB Number field and SAVE the record before attempting to synchronize with OnCore.');
                     return;
                 }
 
-                let adjudicate = null;
+                let details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${record.eirb_number}`);
 
-                // Loop through the api object created above, but ensure you provide it an eirb_number
-                Object.entries(buildAPI(record.eirb_number)).forEach(([protocol, query]) => {
-                    console.log(protocol)
-                    console.log(query)
-                    adjudicate = getFromOnCoreWithIRBNo(record, protocol, query, true);
+                if (details.success && details.data) {
+                    protocolId = details.data['protocolId'];
+                } else {
+                    console.warn("Could not find a protocol with that eIRB number.");
+                    return; // Stop execution if no protocol is found
+                }
+
+                // Fire all endpoint requests in parallel
+                const apiEndpoints = buildAPI(protocolId);
+                const fetchPromises = Object.entries(apiEndpoints).map(async ([protocol, query]) => {
+                    const response = await safeFetchOncore(protocol, query);
+                    return {protocol: protocol, response: response};
                 });
+
+                // Wait for all of them to finish
+                const results = await Promise.all(fetchPromises);
+
+                console.log('results', results)
+
+                // Build a dictionary organized by endpoint: { "protocolConsents": {...}, "protocolStaff": {...} }
+                const oncoreDataByEndpoint = {};
+                results.forEach(res => {
+                    oncoreDataByEndpoint[res.protocol] = res.response.data;
+                });
+
+                console.log('singleRecordSync', oncoreDataByEndpoint);
+
+                // Run the comparison logic once we have ALL the data
+                runMappingComparison(record, oncoreDataByEndpoint, true);
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
@@ -340,9 +370,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                 console.log(data);
                 data.forEach(record => {
                     console.log(record);
-                    getFromOnCoreWithIRBNo(record);
                 });
-                console.log(toSave);
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
@@ -376,7 +404,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
     }
 
     // Use above function to hit multiple endpoints in a loop
-    async function safeFetchOncoreAll(protocolId, api=api(protocolId)) {
+    async function safeFetchOncoreAll(protocolId, api=buildAPI(protocolId)) {
         // Map over the API object, but keep the 'endpoint' attached to the result
         let requests = Object.entries(api).map(async ([endpoint, query]) => {
             let response = await safeFetchOncore(endpoint, query);
@@ -408,119 +436,74 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
         return oncore_fields;
     }
 
-    // Uses the IRB from demographics to request data from OnCore for a given form, we might look for an eIRB method in api instead
-    function getFromOnCoreWithIRBNo(record, protocol, query, show=false) {
-        console.log("getFromOnCoreWithIRBNo Ran");
-        console.log(record);
-        if (!record) {
-            return;
-        }
+    function runMappingComparison(record, oncoreDataByEndpoint, show=false) {
+        console.log("Running Mapping Comparison");
+        console.log(oncoreDataByEndpoint);
+        const experimental = {};
 
-        const eirb_number = record['eirb_number']; // protocol #
-        console.log("IRB Number/Protocol Number for Request: " + eirb_number)
+        Object.entries(mappings).forEach(([form, fields]) => {
+            let form_data = [];
 
-        console.log('Mappings:');
-        console.log(mappings);
+            Object.entries(fields).forEach(([redcapField, mappingObj]) => {
+                const includeUnmapped = mappingObj.include_unmapped;
+                const oncoreFieldName = mappingObj.mapping;
+                const endpointOrigin = mappingObj.protocol; // e.g., 'protocolConsents'
 
-        // TODO: replace this with a collection that mirrors that which runs at page load, meaning it needs to loop through mapped endpoints, but only those mapped ones
-        $.ajax({
-            url: `<?= $module->getUrl("oncore_proxy.php") ?>&action=${protocol}${query}`,
-            method: "GET",
-            dataType: "json",
-            success: function (data) {
-                console.log('Proxied OnCore protocol Request');
-                console.log(data);
+                if (!oncoreFieldName) return;
 
-                let dict = data[0];
+                // Grab the specific dictionary for this mapping's endpoint
+                const dict = oncoreDataByEndpoint[endpointOrigin] || {};
 
-                // Collect all mismatches first
-                const experimental = {};
+                const redcapValue = record[redcapField] || '';
+                const oncoreValue = dict[oncoreFieldName] || '';
 
-                Object.entries(mappings).forEach(([form, fields]) => {
-                    let form_data = [];
-                    Object.entries(fields).forEach(([redcapField, mappingObj]) => {
-                        // mappingObj: { mapping: "OnCoreFieldName", include_unmapped: true/false }
-                        const includeUnmapped = mappingObj.include_unmapped;
-                        const oncoreFieldName = mappingObj.mapping;
-
-                        // skip if mapping is empty and we don't want it included
-                        if (!oncoreFieldName) return;
-
-                        const redcapValue = record[redcapField] || '';
-                        const oncoreValue = dict[oncoreFieldName] || '';
-
-                        if (includeUnmapped && oncoreValue) {
-                            let obj = {
-                                'field_name': redcapField,
-                                'redcap': { 'value': redcapValue, 'selected': false },
-                                'oncore': { 'value': oncoreValue, 'selected': false },
-                                'unmapped': true
-                            };
-                            form_data.push(obj);
-                            return;
-                        }
-                        else if (includeUnmapped && !oncoreValue) {
-                            let obj = {
-                                'field_name': redcapField,
-                                'redcap': { 'value': redcapValue, 'selected': false },
-                                'oncore': { 'value': '', 'selected': false },
-                                'unmapped': true
-                            };
-                            form_data.push(obj);
-                            return;
-                        }
-                        if (!redcapValue && oncoreValue) {
-                            let obj = {
-                                'field_name': redcapField,
-                                'redcap': { 'value': redcapValue, 'selected': false },
-                                'oncore': { 'value': oncoreValue, 'selected': true },
-                                'unmapped': false
-                            };
-                            form_data.push(obj);
-                        }
-                        else if (redcapValue === oncoreValue) {
-                            let obj = {
-                                'field_name': redcapField,
-                                'redcap': { 'value': redcapValue, 'selected': false }, // changed from true pair to false pair
-                                'oncore': { 'value': oncoreValue, 'selected': false }, // should solve previous highlighting bug
-                                'unmapped': false
-                            };
-                            form_data.push(obj);
-                        }
-                        else {
-                            let obj = {
-                                'field_name': redcapField,
-                                'redcap': { 'value': redcapValue, 'selected': true },
-                                'oncore': { 'value': oncoreValue, 'selected': false },
-                                'unmapped': false
-                            };
-                            form_data.push(obj);
-                        }
+                // Your exact comparison logic remains unchanged here
+                if (includeUnmapped && oncoreValue) {
+                    form_data.push({
+                        'field_name': redcapField,
+                        'redcap': { 'value': redcapValue, 'selected': false },
+                        'oncore': { 'value': oncoreValue, 'selected': false },
+                        'unmapped': true
                     });
-                    let obj = {};
-                    obj[form] = form_data;
-                    experimental[form] = form_data;
-                });
-
-                console.log('New experimental structure:', experimental);
-                if (show) {
-                    showComparisonTable(experimental, record);
+                } else if (includeUnmapped && !oncoreValue) {
+                    form_data.push({
+                        'field_name': redcapField,
+                        'redcap': { 'value': redcapValue, 'selected': false },
+                        'oncore': { 'value': '', 'selected': false },
+                        'unmapped': true
+                    });
+                } else if (!redcapValue && oncoreValue) {
+                    form_data.push({
+                        'field_name': redcapField,
+                        'redcap': { 'value': redcapValue, 'selected': false },
+                        'oncore': { 'value': oncoreValue, 'selected': true },
+                        'unmapped': false
+                    });
+                } else if (redcapValue === oncoreValue) {
+                    form_data.push({
+                        'field_name': redcapField,
+                        'redcap': { 'value': redcapValue, 'selected': false },
+                        'oncore': { 'value': oncoreValue, 'selected': false },
+                        'unmapped': false
+                    });
                 } else {
-                    console.log(experimental);
-                    toSave[record.record_id] = experimental;
+                    form_data.push({
+                        'field_name': redcapField,
+                        'redcap': { 'value': redcapValue, 'selected': true },
+                        'oncore': { 'value': oncoreValue, 'selected': false },
+                        'unmapped': false
+                    });
                 }
+            });
 
-                console.log('Record mapped with OnCore data: ', record);
-            },
-            error: function (xhr, status, error) {
-                if (xhr.responseJSON.code === 503) {
-                    $(`<div title="Service Unavailable">OnCore reported a server error. OnCore is likely down right now. Please try again later, or contact your OnCore admin if the issue persists.</div>`).dialog();
-                }
-                console.error('Error fetching protocols:', error, xhr.responseText);
-            }
+            experimental[form] = form_data;
         });
 
-        return record;
+        if (show) {
+            showComparisonTable(experimental, record);
+        } else {
+            toSave[record.record_id] = experimental;
+        }
     }
 
     function get_eIRBs() {
