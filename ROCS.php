@@ -29,6 +29,15 @@ class ROCS extends AbstractExternalModule
                 $this->setProjectSetting('sync-page', ['demographics', 'regulatory']);
             }
 
+            $data_dict = REDCap::getDataDictionary();
+
+            global $Proj;
+
+            // $Proj->metadata is an array of all fields
+            if (isset($Proj->metadata['eirb_number'])) {
+                $this->setProjectSetting('irb-field', 'eirb_number');
+            }
+
             $this->setProjectSetting('init', true);
         }
     }

@@ -19,6 +19,12 @@
             "repeatable": true
         },
         {
+            "key": "irb-field",
+            "name": "Select which field contains the eIRB/IRB Number for your entries. The app by default looks for 'eirb_number'.",
+            "type": "field-list",
+            "repeatable": false
+        },
+        {
             "key": "token-url-desc",
             "name": "Please input the url for the OnCore OAuth Token API source you wish to use below. The URL should look something like this:<br> https://oncore.forteresearchapps.com/forte-platform-web/api/oauth/token.",
             "type": "descriptive",
@@ -103,8 +109,7 @@
         {
             "key": "init",
             "name": "If false, run preconfigure.",
-            "type": "checkbox",
-            "hidden": true
+            "type": "checkbox"
         }
     ],
     "links": {

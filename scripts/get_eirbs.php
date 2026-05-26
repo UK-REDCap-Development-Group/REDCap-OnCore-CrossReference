@@ -7,14 +7,16 @@ $pid = $module->getProjectId();
 
 $project_id = $module->getProjectId();
 
+$irb_field = $module->getProjectSetting('irb-field');
+
 // Filter logic example
-$filter = "[eirb_number] <> '' AND [sync(1)] <> '1'";
+$filter = "[".$irb_field."] <> '' AND [sync(1)] <> '1'";
 
 $data = REDCap::getData([
     'project_id' => $pid,
     'return_format' => 'json',
     'filterLogic' => $filter,
-    'fields' => ['eirb_number']
+    'fields' => [$irb_field]
 ]);
 
 // Flatten and return as JSON

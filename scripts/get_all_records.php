@@ -16,10 +16,12 @@ if (is_string($forms_input) && !empty($forms_input)) {
     $forms = [];
 }
 
-$filter = "[eirb_number] != '' AND [sync(1)] <> 1";
+$irb_field = $module->getProjectSetting('irb-field');
+
+$filter = "[".$irb_field."] != '' AND [sync(1)] <> 1";
 
 // Define the base fields you always want
-$requested_fields = ['record_id', 'eirb_number', 'irb_number'];
+$requested_fields = ['record_id', $irb_field];
 
 // If forms were passed, grab all their fields and merge them
 if (!empty($forms)) {
