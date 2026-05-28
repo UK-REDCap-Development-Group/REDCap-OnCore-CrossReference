@@ -11,9 +11,9 @@ if (empty($pid)) {
 }
 
 $module->setProjectId($pid);
-$comparisons = $module->getProjectSetting('to-adjudicate') ?? [];
+$adjudicates = $module->getProjectSetting('to-adjudicate') ?? [];
 
 echo json_encode([
     'status' => 'success',
-    'data' => $comparisons,
+    'data' => $adjudicates,
 ]);

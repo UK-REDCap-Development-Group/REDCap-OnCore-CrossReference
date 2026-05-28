@@ -10,6 +10,8 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 ?>
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
 <script>
+    const irb_field = <?= json_encode($module->getProjectSetting('irb_field') ?? 'eirb_number') ?>;
+
     const buildAPI = (protocolId) => ({
         protocols: `&protocolId=${protocolId}`,
         protocolConsents: `&protocolId=${protocolId}`,
@@ -300,7 +302,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
         });
     }
 
-    async function singleRecordSync(id = false) {
+    async function singleRecordSync(id = false, show = true) {
         console.log('singleRecordSync Ran');
         if (!id) {
             const urlParams = new URLSearchParams(window.location.search);
@@ -314,12 +316,12 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                 let protocolId = null;
                 let record = data[0];
 
-                if (!record.eirb_number || record.eirb_number === "") {
+                if (!record[irb_field] || record[irb_field] === "") {
                     alert('Please ensure to populate the IRB Number field and SAVE the record before attempting to synchronize with OnCore.');
                     return;
                 }
 
-                let details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${record.eirb_number}`);
+                let details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${record[irb_field]}`);
 
                 if (details.success && details.data) {
                     protocolId = details.data['protocolId'];
@@ -349,7 +351,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                 console.log('singleRecordSync', oncoreDataByEndpoint);
 
                 // Run the comparison logic once we have ALL the data
-                runMappingComparison(record, oncoreDataByEndpoint, true);
+                runMappingComparison(record, oncoreDataByEndpoint, show);
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
@@ -358,24 +360,62 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
     }
 
     // Looping version of above fnc
-    function getAllFromREDCap() {
+    function fullSync() {
+        <?php $module->setProjectSetting('running', true); ?>
         console.log(displayed);
         $.ajax({
-            url: '<?= $module->getUrl("scripts/get_all_records.php") ?>',
+            url: '<?= $module->getUrl("scripts/get_eirbs.php") ?>',
             data: {
                 forms: displayed
             },
-            success: function (data) {
+            success: async function (data) {
                 // TODO: finish this looping to save records, then figure out how to run it in the background
-                console.log(data);
-                data.forEach(record => {
+                let toSave = [];
+                let protocolId = null;
+
+                for (const record of data) {
                     console.log(record);
-                });
+
+                    let details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${record[irb_field]}`);
+                    console.log(details);
+
+                    if (details.success && details.data) {
+                        protocolId = details.data['protocolId'];
+                    } else {
+                        console.warn("Could not find a protocol with that eIRB number.");
+                        toSave.push({'record_id': record.record_id, 'title': record.title, status: 'missing', message: 'The eIRB/IRB was not found in OnCore.'});
+                        continue; // Stop execution if no protocol is found
+                    }
+
+                    // Fire all endpoint requests in parallel
+                    const apiEndpoints = buildAPI(protocolId);
+                    const fetchPromises = Object.entries(apiEndpoints).map(async ([protocol, query]) => {
+                        const response = await safeFetchOncore(protocol, query);
+                        return {protocol: protocol, response: response};
+                    });
+
+                    // Wait for all of them to finish
+                    const results = await Promise.all(fetchPromises);
+
+                    console.log('results', results)
+
+                    // Build a dictionary organized by endpoint: { "protocolConsents": {...}, "protocolStaff": {...} }
+                    const oncoreDataByEndpoint = {};
+                    results.forEach(res => {
+                        oncoreDataByEndpoint[res.protocol] = res.response.data;
+                    });
+
+                    toSave.push({'record_id': record.record_id, 'title': record.title, 'results': results, status: 'adjudicate', message: 'OnCore data does not match data in REDCap.'});
+
+                    console.log(results);
+                }
+                track_adjudicates(toSave); // save adjudicates to the config file so that they can be referenced elsewhere
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
             }
         });
+        <?php $module->setProjectSetting('running', false); ?>
     }
 
     // Simple oncore request for page render, additional query defaults to null
@@ -396,7 +436,15 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
     // Even if a request fails, I still want the site to load
     function safeFetchOncore(protocol, query='') {
         return fetchOncore(protocol, query)
-            .then(data => ({ success: true, data: data }))
+            .then(data => {
+                if (data['protocolId']) {
+                    return {success: true, data: data, message:"data successfully retrieved"};
+                }
+                else {
+                    return {success: false, message:"no data for eIRB/IRB provided"};
+                }
+
+            })
             .catch(err => {
                 console.error(`Failed endpoint: ${protocol}`, err.responseText || err);
                 return { success: false, data: null };
@@ -519,16 +567,15 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
     }
 
     // Runs a request to a script saving comparisons to the config
-    function track_adjudicates() {
+    function track_adjudicates(adjudicates) {
         $.ajax({
             url: '<?= $module->getUrl("scripts/track_adjudicates.php") ?>',
             data: {
-                'comparisons': toSave
+                'to-adjudicate': adjudicates
             },
             success: function (data) {
                 console.log(data.message);
                 console.log(data.data);
-
             },
             error: function (xhr, status, error) {
                 console.error('Error saving comparisons:', error, xhr.responseText);

@@ -42,4 +42,12 @@ include "scripts/scripts.php";
         trackInstance();
     });
 
+    document.addEventListener('DOMContentLoaded', () => {
+        let running = <?= $module->getProjectSetting('running', false); ?>;
+
+        if (running) {
+            $(`<div title="System is Currently Running">Records are currently being checked against the OnCore database. The current state is based on data from the last synchronization. It is recommended that you come back in a little while to use the most current information.</div>`).dialog();
+        }
+    });
+
 </script>

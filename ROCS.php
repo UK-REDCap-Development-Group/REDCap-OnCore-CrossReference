@@ -39,6 +39,7 @@ class ROCS extends AbstractExternalModule
             }
 
             $this->setProjectSetting('init', true);
+            $this->setProjectSetting('running', false);
         }
     }
 

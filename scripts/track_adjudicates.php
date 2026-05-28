@@ -4,18 +4,18 @@ namespace UKModules\ROCS;
 /** @var \ExternalModules\AbstractExternalModule $module */
 
 $pid = (int) $_POST['pid'];
-$comparisons = json_decode($_POST['comparisons'], true);
+$adjudicates = json_decode($_POST['to-adjudicate'], true);
 
-if (empty($pid) || !is_array($comparisons)) {
+if (empty($pid) || !is_array($adjudicates)) {
     http_response_code(400);
-    exit(json_encode(['error' => 'Invalid input', 'pid' => $pid, 'comparisons' => $comparisons]));
+    exit(json_encode(['error' => 'Invalid input', 'pid' => $pid, 'comparisons' => $adjudicates]));
 }
 
 $module->setProjectId($pid);
-$module->setProjectSetting('to-adjudicate', $comparisons);
+$module->setProjectSetting('to-adjudicate', $adjudicates);
 
 echo json_encode([
     'status' => 'success',
     'message' => 'All comparisons saved successfully',
-    'data' => $comparisons,
+    'data' => $adjudicates,
 ]);

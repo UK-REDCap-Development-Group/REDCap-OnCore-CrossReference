@@ -781,7 +781,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
         }
 
         document.getElementById('sync-btn').addEventListener('click', () => {
-            getAllFromREDCap();
+            fullSync();
         });
 
         document.getElementById('upload-btn').addEventListener('click', async () => {

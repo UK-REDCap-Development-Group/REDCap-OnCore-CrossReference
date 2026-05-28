@@ -109,7 +109,14 @@
         {
             "key": "init",
             "name": "If false, run preconfigure.",
-            "type": "checkbox"
+            "type": "checkbox",
+            "hidden": true
+        },
+        {
+            "key": "running",
+            "name": "Adjudication is running in background and sync page should be flagged as such.",
+            "type": "checkbox",
+            "hidden": true
         }
     ],
     "links": {
