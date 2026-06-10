@@ -25,6 +25,12 @@
             "repeatable": false
         },
         {
+            "key": "title-field",
+            "name": "Select the field which contains a title for your record. This will be displayed in the Sync Dashboard. 'full_title' is automatically assigned if present in the project.",
+            "type": "field-list,",
+            "repeatable": false
+        },
+        {
             "key": "token-url-desc",
             "name": "Please input the url for the OnCore OAuth Token API source you wish to use below. The URL should look something like this:<br> https://oncore.forteresearchapps.com/forte-platform-web/api/oauth/token.",
             "type": "descriptive",

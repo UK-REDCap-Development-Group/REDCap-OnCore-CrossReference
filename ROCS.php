@@ -38,6 +38,10 @@ class ROCS extends AbstractExternalModule
                 $this->setProjectSetting('irb-field', 'eirb_number');
             }
 
+            if (isset($Proj->metadata['full_title'])) {
+                $this->setProjectSetting('title-field', 'full_title');
+            }
+
             $this->setProjectSetting('init', true);
             $this->setProjectSetting('running', false);
         }

@@ -8,12 +8,9 @@
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ROCS.php" beforeDir="false" afterPath="$PROJECT_DIR$/ROCS.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/config.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pages/FieldMappings.php" beforeDir="false" afterPath="$PROJECT_DIR$/pages/FieldMappings.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/pages/SyncDashboard.php" beforeDir="false" afterPath="$PROJECT_DIR$/pages/SyncDashboard.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/get_eirbs.php" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/get_eirbs.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/load_adjudicates.php" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/load_adjudicates.php" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/scripts/scripts.php" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/scripts.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/track_adjudicates.php" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/track_adjudicates.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -98,7 +95,10 @@
       <workItem from="1778074899567" duration="15970000" />
       <workItem from="1779280914500" duration="16253000" />
       <workItem from="1779803648858" duration="6583000" />
-      <workItem from="1779984088561" duration="4751000" />
+      <workItem from="1779984088561" duration="5388000" />
+      <workItem from="1780320215394" duration="3483000" />
+      <workItem from="1780408746266" duration="6060000" />
+      <workItem from="1781099041880" duration="5571000" />
     </task>
     <servers />
   </component>

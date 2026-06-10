@@ -22,6 +22,24 @@ include "scripts/scripts.php";
         </div>
     </div>
     <div id="sync_list" class="row" style="flex-direction: column;">
+        <div id="msg"></div>
+        <select name="filter" id="filter">
+            <option value="adjudicate">Need Attention</option>
+            <option value="missing">Not in OnCore</option>
+        </select>
+        <table>
+            <thead>
+                <tr>
+                    <th>Record ID</th>
+                    <th>eIRB No.</th>
+                    <th>Title (in REDCap)</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="sync_list_body">
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -35,18 +53,46 @@ include "scripts/scripts.php";
 
     }
 
-    document.getElementById('sync-btn').addEventListener('click', () => {
-        //modalTest(redcap_record, oncore_record, handleRecordSelection);
-        //let oncore = getFromOnCore(11, protocolNo); // manual test using Saltzman record
-        getFromREDCap('eirb_number', eIRBno);
-        trackInstance();
-    });
+    document.addEventListener('DOMContentLoaded', async () => {
+        let running = <?= json_encode($module->getProjectSetting('running')); ?>;
+        const adjudicates = <?= json_encode($module->getProjectSetting('to-adjudicate')); ?>;
 
-    document.addEventListener('DOMContentLoaded', () => {
-        let running = <?= $module->getProjectSetting('running', false); ?>;
+        console.log(running);
 
         if (running) {
             $(`<div title="System is Currently Running">Records are currently being checked against the OnCore database. The current state is based on data from the last synchronization. It is recommended that you come back in a little while to use the most current information.</div>`).dialog();
+        }
+
+        console.log(adjudicates);
+
+
+        const tbody = document.getElementById('sync_list_body');
+        for (const each of adjudicates) {
+            console.log(each)
+            let row = document.createElement('tr');
+            row.innerHTML = `
+            <td>${each.record_id}</td>
+            <td>${each.eirb_number}</td>
+            <td>${each.title}</td>
+            <td>${each.status}</td>
+            <td><button>Adjudicate</button><button>Ignore this time</button></td>
+            `;
+            tbody.appendChild(row);
+        }
+        const msg = document.getElementById('msg');
+        let records = 0;
+        let successes = 0;
+        let last_sync = "1/11/1111 @ 1:11 PM";
+        msg.innerHTML = `<h3>${records} synced. ${successes} matched data in OnCore. Last sync completed: ${last_sync}</h3>`
+
+
+
+        const syncBtn = document.getElementById('sync-btn');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', () => {
+                console.log(adjudicates);
+                trackInstance();
+            });
         }
     });
 

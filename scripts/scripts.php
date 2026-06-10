@@ -362,17 +362,18 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
     // Looping version of above fnc
     function fullSync() {
         <?php $module->setProjectSetting('running', true); ?>
-        console.log(displayed);
         $.ajax({
             url: '<?= $module->getUrl("scripts/get_eirbs.php") ?>',
             data: {
                 forms: displayed
             },
             success: async function (data) {
+                console.log(<?= json_encode($module->getProjectSetting('running')) ?>)
                 // TODO: finish this looping to save records, then figure out how to run it in the background
                 let toSave = [];
                 let protocolId = null;
 
+                let i = 0;
                 for (const record of data) {
                     console.log(record);
 
@@ -383,7 +384,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                         protocolId = details.data['protocolId'];
                     } else {
                         console.warn("Could not find a protocol with that eIRB number.");
-                        toSave.push({'record_id': record.record_id, 'title': record.title, status: 'missing', message: 'The eIRB/IRB was not found in OnCore.'});
+                        toSave.push({'record_id': record.record_id, 'eirb_number': record.eirb_number, 'title': record.full_title, status: 'missing', message: 'The eIRB/IRB was not found in OnCore.'});
                         continue; // Stop execution if no protocol is found
                     }
 
@@ -405,9 +406,11 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                         oncoreDataByEndpoint[res.protocol] = res.response.data;
                     });
 
-                    toSave.push({'record_id': record.record_id, 'title': record.title, 'results': results, status: 'adjudicate', message: 'OnCore data does not match data in REDCap.'});
+                    toSave.push({'record_id': record.record_id, 'eirb_number': record.eirb_number, 'title': record.full_title, 'results': results, status: 'adjudicate', message: 'OnCore data does not match data in REDCap.'});
 
                     console.log(results);
+                    i++;
+                    if (i > 10) {break;}
                 }
                 track_adjudicates(toSave); // save adjudicates to the config file so that they can be referenced elsewhere
             },
@@ -570,12 +573,30 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
     function track_adjudicates(adjudicates) {
         $.ajax({
             url: '<?= $module->getUrl("scripts/track_adjudicates.php") ?>',
+            method: 'POST',
             data: {
-                'to-adjudicate': adjudicates
+                pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                redcap_csrf_token: <?= json_encode($csrf) ?>,
+                'to-adjudicate': JSON.stringify(adjudicates)
             },
             success: function (data) {
                 console.log(data.message);
                 console.log(data.data);
+            },
+            error: function (xhr, status, error) {
+                console.error('Error saving comparisons:', error, xhr.responseText);
+            }
+        });
+    }
+
+    function load_adjudicates() {
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/load_adjudicates.php") ?>',
+            method: 'GET',
+            success: function (data) {
+                console.log(data.message);
+                console.log(data.data);
+                return data;
             },
             error: function (xhr, status, error) {
                 console.error('Error saving comparisons:', error, xhr.responseText);

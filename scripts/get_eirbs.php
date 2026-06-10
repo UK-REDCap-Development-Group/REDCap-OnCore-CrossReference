@@ -16,7 +16,7 @@ $data = REDCap::getData([
     'project_id' => $pid,
     'return_format' => 'json',
     'filterLogic' => $filter,
-    'fields' => ['record_id', $irb_field, 'title']
+    'fields' => ['record_id', $irb_field, 'full_title']
 ]);
 
 // Flatten and return as JSON
