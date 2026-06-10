@@ -248,3 +248,9 @@ table.dataTable tbody tr.highlight td {
 .disabled-cell {
     background-color: green !important;
 }
+
+.toggle {
+    color: blue;
+    cursor: pointer;
+    margin-left: 5px;
+}

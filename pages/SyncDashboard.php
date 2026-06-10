@@ -24,10 +24,11 @@ include "scripts/scripts.php";
     <div id="sync_list" class="row" style="flex-direction: column;">
         <div id="msg"></div>
         <select name="filter" id="filter">
+            <option value="all">All</option>
             <option value="adjudicate">Need Attention</option>
             <option value="missing">Not in OnCore</option>
         </select>
-        <table>
+        <table class="dataTable cell-border no-footer">
             <thead>
                 <tr>
                     <th>Record ID</th>
@@ -67,17 +68,23 @@ include "scripts/scripts.php";
 
 
         const tbody = document.getElementById('sync_list_body');
+        let i = 1;
         for (const each of adjudicates) {
             console.log(each)
             let row = document.createElement('tr');
+            row.classList = i % 2 !== 0 ? 'odd' : 'even';
             row.innerHTML = `
             <td>${each.record_id}</td>
             <td>${each.eirb_number}</td>
-            <td>${each.title}</td>
+            <td><p class="citation" data-full="${each.title}">
+                                            ${each.title.length > 100 ? each.title.slice(0, 100) + '...' : each.title}
+                                            ${each.title.length > 100 ? '<span class="toggle" style="z-index:9999;"> more</span>' : ''}
+                                        </p></td>
             <td>${each.status}</td>
             <td><button>Adjudicate</button><button>Ignore this time</button></td>
             `;
             tbody.appendChild(row);
+            i++;
         }
         const msg = document.getElementById('msg');
         let records = 0;
@@ -93,6 +100,23 @@ include "scripts/scripts.php";
                 console.log(adjudicates);
                 trackInstance();
             });
+        }
+    });
+
+    document.addEventListener("click", function(e) {
+        if (!e.target.classList.contains("toggle")) return;
+
+        // STOP the click from bubbling up to the <label> and triggering the checkbox
+        e.preventDefault();
+        e.stopPropagation();
+
+        const p = e.target.closest(".citation");
+        const full = p.dataset.full;
+
+        if (e.target.textContent.trim() === "more") {
+            p.innerHTML = `${full} <span class="toggle" style="z-index:9999;"> less</span>`;
+        } else {
+            p.innerHTML = `${full.slice(0,100)}... <span class="toggle" style="z-index:9999;"> more</span>`;
         }
     });
 
