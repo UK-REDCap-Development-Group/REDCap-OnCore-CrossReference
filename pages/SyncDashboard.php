@@ -23,12 +23,12 @@ include "scripts/scripts.php";
     </div>
     <div id="sync_list" class="row" style="flex-direction: column;">
         <div id="msg"></div>
-        <select name="filter" id="filter">
+        <select name="filter" id="filter" onchange="filter(this.value)">
             <option value="all">All</option>
             <option value="adjudicate">Need Attention</option>
             <option value="missing">Not in OnCore</option>
         </select>
-        <table class="dataTable cell-border no-footer">
+        <table class="dataTable cell-border no-footer" id="adjudicate_table">
             <thead>
                 <tr>
                     <th>Record ID</th>
@@ -54,9 +54,36 @@ include "scripts/scripts.php";
 
     }
 
+    // hides records in the adjudicate table based on what's selected
+    function filter(value) {
+        const body = document.getElementById('sync_list_body');
+        let children = [...body.childNodes]; // convert to a JS array so we can perform shift ops
+        children.shift();
+
+        for (const each of children) {
+            if (value === 'all') {
+                /* show all records */
+                each.classList.remove('hidden');
+            }
+            else {
+                if (!each.classList.contains(value)) {
+                    /* hide any records not matching filter value */
+                    each.classList.add('hidden');
+                }
+                else {
+                    /* unhide records which should be shown according to filter */
+                    each.classList.remove('hidden');
+                }
+            }
+        }
+
+
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
         let running = <?= json_encode($module->getProjectSetting('running')); ?>;
         const adjudicates = <?= json_encode($module->getProjectSetting('to-adjudicate')); ?>;
+        const metadata = <?= json_encode($module->getProjectSetting('adj-metadata')); ?>;
 
         console.log(running);
 
@@ -68,11 +95,9 @@ include "scripts/scripts.php";
 
 
         const tbody = document.getElementById('sync_list_body');
-        let i = 1;
         for (const each of adjudicates) {
             console.log(each)
             let row = document.createElement('tr');
-            row.classList = i % 2 !== 0 ? 'odd' : 'even';
             row.innerHTML = `
             <td>${each.record_id}</td>
             <td>${each.eirb_number}</td>
@@ -83,16 +108,19 @@ include "scripts/scripts.php";
             <td>${each.status}</td>
             <td><button>Adjudicate</button><button>Ignore this time</button></td>
             `;
+            row.classList.add(each.status);
             tbody.appendChild(row);
-            i++;
         }
         const msg = document.getElementById('msg');
-        let records = 0;
-        let successes = 0;
-        let last_sync = "1/11/1111 @ 1:11 PM";
-        msg.innerHTML = `<h3>${records} synced. ${successes} matched data in OnCore. Last sync completed: ${last_sync}</h3>`
+        if (metadata) {
+            const synced = metadata.checked;
+            const matched = metadata.matched;
+            const date = metadata.date;
+            const time = metadata.time;
 
-
+            let last_sync = `${date} @ ${time}`;
+            msg.innerHTML = `<h3>${synced} records were synced. ${matched} records matched data in OnCore and were ignored. Last sync completed: ${last_sync}</h3>`
+        }
 
         const syncBtn = document.getElementById('sync-btn');
         if (syncBtn) {

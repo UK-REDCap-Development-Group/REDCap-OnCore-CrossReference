@@ -113,6 +113,12 @@
             "hidden": true
         },
         {
+            "key": "adj-metadata",
+            "name": "DO NOT EDIT! metadata relating to sync processes",
+            "type": "json",
+            "hidden": true
+        },
+        {
             "key": "init",
             "name": "If false, run preconfigure.",
             "type": "checkbox",

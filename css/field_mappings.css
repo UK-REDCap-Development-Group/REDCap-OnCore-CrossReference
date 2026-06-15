@@ -171,6 +171,11 @@ table.dataTable tbody tr.highlight td {
     color: white;
 }
 
+.adj-button {
+    background-color: #28a745;
+    color: white;
+}
+
 .close-button {
     background-color: #dc3545;
     color: white;

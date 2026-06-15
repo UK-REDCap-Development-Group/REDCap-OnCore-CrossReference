@@ -374,6 +374,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                 let protocolId = null;
 
                 let i = 0;
+                let matched = 0;
                 for (const record of data) {
                     console.log(record);
 
@@ -405,6 +406,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                     results.forEach(res => {
                         oncoreDataByEndpoint[res.protocol] = res.response.data;
                     });
+                    // TODO: go ahead and check here if the records match or not so we can track it.
 
                     toSave.push({'record_id': record.record_id, 'eirb_number': record.eirb_number, 'title': record.full_title, 'results': results, status: 'adjudicate', message: 'OnCore data does not match data in REDCap.'});
 
@@ -412,6 +414,19 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                     i++;
                     if (i > 10) {break;}
                 }
+
+                // Build and save metadata
+                const now = new Date();
+                const date = now.toLocaleDateString();
+                const time = now.toLocaleTimeString();
+                const checked = data.length;
+                const metadata = {
+                    'date': date,
+                    'time': time,
+                    'checked': checked,
+                    'matched': matched
+                }
+                save_metadata(metadata);
                 track_adjudicates(toSave); // save adjudicates to the config file so that they can be referenced elsewhere
             },
             error: function (xhr, status, error) {
@@ -492,6 +507,9 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
         console.log(oncoreDataByEndpoint);
         const experimental = {};
 
+        let matched = 0;
+        let totalMappedFields = 0; // NEW: Track the total number of evaluated fields
+
         Object.entries(mappings).forEach(([form, fields]) => {
             let form_data = [];
 
@@ -501,6 +519,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                 const endpointOrigin = mappingObj.protocol; // e.g., 'protocolConsents'
 
                 if (!oncoreFieldName) return;
+                totalMappedFields++;
 
                 // Grab the specific dictionary for this mapping's endpoint
                 const dict = oncoreDataByEndpoint[endpointOrigin] || {};
@@ -537,6 +556,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                         'oncore': { 'value': oncoreValue, 'selected': false },
                         'unmapped': false
                     });
+                    matched++;
                 } else {
                     form_data.push({
                         'field_name': redcapField,
@@ -549,6 +569,10 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 
             experimental[form] = form_data;
         });
+
+        if (matched === mappings.length) {
+            return true;
+        }
 
         if (show) {
             showComparisonTable(experimental, record);
@@ -589,6 +613,25 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
         });
     }
 
+    function save_metadata(metadata) {
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/save_metadata.php") ?>',
+            method: 'POST',
+            data: {
+                pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                redcap_csrf_token: <?= json_encode($csrf) ?>,
+                'adj-metadata': JSON.stringify(metadata)
+            },
+            success: function (data) {
+                console.log(data.message);
+                console.log(data.data);
+            },
+            error: function (xhr, status, error) {
+                console.error('Error saving comparisons:', error, xhr.responseText);
+            }
+        });
+    }
+
     function load_adjudicates() {
         $.ajax({
             url: '<?= $module->getUrl("scripts/load_adjudicates.php") ?>',
@@ -603,4 +646,5 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
             }
         });
     }
+
 </script>
