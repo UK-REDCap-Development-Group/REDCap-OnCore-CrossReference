@@ -86,6 +86,18 @@ try {
             echo $response;
             break;
 
+        case 'protocolInstitutions':
+            // GET
+            $response = $module->proxyPost("/protocolInstitutions?$queryString");
+            echo $response;
+            break;
+
+        case 'protocolIrbReviews':
+            // GET
+            $response = $module->proxyPost("/protocolIrbReviews?$queryString");
+            echo $response;
+            break;
+
         case 'contactCredentials':
             // GET
             // query string should be contactId=

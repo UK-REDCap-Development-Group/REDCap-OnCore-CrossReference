@@ -21,7 +21,11 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
         protocolPrmcReviews: `&protocolId=${protocolId}`,
         protocolIde: `&protocolId=${protocolId}`,
         protocolInd: `&protocolId=${protocolId}`,
+        protocolIrbReviews: `&protocolId=${protocolId}`,
+        protocolInstitutions: `&protocolId=${protocolId}`,
     });
+
+    // TODO: review what needs to be done to implement contactCredentials
 
     /* Create the basic modal structure */
     function buildModal() {
