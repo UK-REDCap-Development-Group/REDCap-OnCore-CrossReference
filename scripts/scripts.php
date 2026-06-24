@@ -376,8 +376,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                 // TODO: finish this looping to save records, then figure out how to run it in the background
                 let toSave = [];
                 let protocolId = null;
-
-                let i = 0;
+                
                 let matched = 0;
                 for (const record of data) {
                     console.log(record);
@@ -415,8 +414,6 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                     toSave.push({'record_id': record.record_id, 'eirb_number': record.eirb_number, 'title': record.full_title, 'results': results, status: 'adjudicate', message: 'OnCore data does not match data in REDCap.'});
 
                     console.log(results);
-                    i++;
-                    if (i > 10) {break;}
                 }
 
                 // Build and save metadata
