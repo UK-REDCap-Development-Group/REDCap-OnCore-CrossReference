@@ -35,7 +35,7 @@ try {
         case 'protocolManagementDetails':
             // GET
             // Query string should be:  irbNo=
-            $response = $module->proxyPost("/protocolManagementDetails?$queryString");
+            $response = $module->proxyRequest("/protocolManagementDetails?$queryString");
             echo $response;
             break;
 
@@ -43,65 +43,65 @@ try {
             // GET
             // Query string should be: protocolId=
             $queryString = explode('=', $queryString)[1];
-            $response = $module->proxyPost("/protocols/$queryString");
+            $response = $module->proxyRequest("/protocols/$queryString");
             echo $response;
             break;
 
         case 'protocolSponsors':
             // GET
             // Query string should be: protocolId= or sponsorProtocolNo=
-            $response = $module->proxyPost("/protocolSponsors?$queryString");
+            $response = $module->proxyRequest("/protocolSponsors?$queryString");
             echo $response;
             break;
 
         case 'protocolStaff':
             // GET
             // Query string should be: protocolId=
-            $response = $module->proxyPost("/protocolStaff?$queryString");
+            $response = $module->proxyRequest("/protocolStaff?$queryString");
             echo $response;
             break;
 
         case 'protocolManagementDetails':
             // GET
             // Query string requires irbNo
-            $response = $module->proxyPost("/protocolManagementDetails/".$special);
+            $response = $module->proxyRequest("/protocolManagementDetails/".$special);
             echo $response;
             break;
 
         case 'protocolPrmcReviews':
             // GET
-            $response = $module->proxyPost("/protocolPrmcReviews?$queryString");
+            $response = $module->proxyRequest("/protocolPrmcReviews?$queryString");
             echo $response;
             break;
 
         case 'protocolTasks':
             // GET
-            $response = $module->proxyPost("/protocolTasks?$queryString");
+            $response = $module->proxyRequest("/protocolTasks?$queryString");
             echo $response;
             break;
 
         case 'protocolInd':
             // GET
-            $response = $module->proxyPost("/protocolInd?$queryString");
+            $response = $module->proxyRequest("/protocolInd?$queryString");
             echo $response;
             break;
 
         case 'protocolInstitutions':
             // GET
-            $response = $module->proxyPost("/protocolInstitutions?$queryString");
+            $response = $module->proxyRequest("/protocolInstitutions?$queryString");
             echo $response;
             break;
 
         case 'protocolIrbReviews':
             // GET
-            $response = $module->proxyPost("/protocolIrbReviews?$queryString");
+            $response = $module->proxyRequest("/protocolIrbReviews?$queryString");
             echo $response;
             break;
 
         case 'contactCredentials':
             // GET
             // query string should be contactId=
-            $response = $module->proxyPost("/contactCredentials?$queryString");
+            $response = $module->proxyRequest("/contactCredentials?$queryString");
             echo $response;
             break;
 
