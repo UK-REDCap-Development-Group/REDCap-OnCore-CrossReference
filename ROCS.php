@@ -52,7 +52,8 @@ class ROCS extends AbstractExternalModule
     // Ensure requests to proxyRequest will have the csrf token included in the json.
     public function proxyRequest($apiPath, $method = 'GET', $payload = [])
     {
-        $client = new Client();
+        //$client = new Client(); // disabled because it didn't work on our test instance despite SSL being enabled on that server
+        $client = new Client(['verify' => false]);
         $tokenUrl = trim($this->getProjectSetting('oncore-token-url') ?: '');
         $baseUrl = trim($this->getProjectSetting('oncore-api-url') ?: '');
 
