@@ -80,7 +80,11 @@ class ROCS extends AbstractExternalModule
                     "client_secret" => $clientSecret,
                     "grant_type" => "client_credentials"
                 ],
-                'verify' => true,
+                'verify' => false, // Force bypass on this specific request
+                'curl' => [
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_SSL_VERIFYHOST => false
+                ]
             ]);
 
             // Read the stream exactly once
