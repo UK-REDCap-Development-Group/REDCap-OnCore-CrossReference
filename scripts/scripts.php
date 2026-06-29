@@ -365,7 +365,6 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 
     // Looping version of above fnc
     function fullSync() {
-        <?php $module->setProjectSetting('running', true); ?>
         $.ajax({
             url: '<?= $module->getUrl("scripts/get_eirbs.php") ?>',
             data: {
@@ -376,7 +375,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                 // TODO: finish this looping to save records, then figure out how to run it in the background
                 let toSave = [];
                 let protocolId = null;
-                
+
                 let matched = 0;
                 for (const record of data) {
                     console.log(record);
@@ -388,7 +387,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                         protocolId = details.data['protocolId'];
                     } else {
                         console.warn("Could not find a protocol with that eIRB number.");
-                        toSave.push({'record_id': record.record_id, 'eirb_number': record.eirb_number, 'title': record.full_title, status: 'missing', message: 'The eIRB/IRB was not found in OnCore.'});
+                        toSave.push({'record_id': record.record_id, 'eirb_number': record.eirb_number, 'title': record.full_title, status: 'not in OnCore', message: 'The eIRB/IRB was not found in OnCore.'});
                         continue; // Stop execution if no protocol is found
                     }
 
@@ -409,9 +408,26 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                     results.forEach(res => {
                         oncoreDataByEndpoint[res.protocol] = res.response.data;
                     });
-                    // TODO: go ahead and check here if the records match or not so we can track it.
 
-                    toSave.push({'record_id': record.record_id, 'eirb_number': record.eirb_number, 'title': record.full_title, 'results': results, status: 'adjudicate', message: 'OnCore data does not match data in REDCap.'});
+                    // Run the comparison! (Passing false so it doesn't trigger the modal UI)
+                    const isPerfectMatch = runMappingComparison(record, oncoreDataByEndpoint, false);
+
+                    if (isPerfectMatch) {
+                        // Increment the counter for your metadata payload
+                        matched++;
+                    } else {
+                        // Only push to 'toSave' if it actually needs adjudication
+                        toSave.push({
+                            'record_id': record.record_id,
+                            'eirb_number': record.eirb_number,
+                            'title': record.full_title,
+                            'results': results,
+                            status: 'needs attention',
+                            message: 'OnCore data does not match data in REDCap.'
+                        });
+                    }
+
+                    //toSave.push({'record_id': record.record_id, 'eirb_number': record.eirb_number, 'title': record.full_title, 'results': results, status: 'adjudicate', message: 'OnCore data does not match data in REDCap.'});
 
                     console.log(results);
                 }
@@ -434,7 +450,6 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
             }
         });
-        <?php $module->setProjectSetting('running', false); ?>
     }
 
     // Simple oncore request for page render, additional query defaults to null
@@ -571,7 +586,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
             experimental[form] = form_data;
         });
 
-        if (matched === mappings.length) {
+        if (totalMappedFields > 0 && matched === totalMappedFields) {
             return true;
         }
 

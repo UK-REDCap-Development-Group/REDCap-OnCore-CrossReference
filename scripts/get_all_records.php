@@ -18,7 +18,7 @@ if (is_string($forms_input) && !empty($forms_input)) {
 
 $irb_field = $module->getProjectSetting('irb-field');
 
-$filter = "[".$irb_field."] != '' AND [sync(1)] <> 1";
+$filter = "[".$irb_field."] != '' AND [rocs_sync(1)] <> 1";
 
 // Define the base fields you always want
 $requested_fields = ['record_id', $irb_field];

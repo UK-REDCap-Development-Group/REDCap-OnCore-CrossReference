@@ -17,7 +17,7 @@ if (empty($record_id)) {
 $project_id = $module->getProjectId();
 
 // Filter logic example
-$filter = "[record_id] = " . $record_id . " AND [sync(1)] <> 1";
+$filter = "[record_id] = " . $record_id . " AND [rocs_sync(1)] <> 1";
 
 if ($forms) {
     $data = REDCap::getData([

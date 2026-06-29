@@ -23,7 +23,7 @@ if (empty($value)) {
 $project_id = $module->getProjectId();
 
 // Filter logic example
-$filter = "[" . $field_name . "] = '" . $value . "' AND [sync(1)] <> '1'";
+$filter = "[" . $field_name . "] = '" . $value . "' AND [rocs_sync(1)] <> '1'";
 
 $data = REDCap::getData([
     'project_id' => $pid,

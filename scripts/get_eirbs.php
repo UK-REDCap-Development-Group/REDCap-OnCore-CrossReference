@@ -3,6 +3,7 @@ use ExternalModules\ExternalModules;
 use ExternalModules\AbstractExternalModule;
 
 $module = ExternalModules::getModuleInstance('REDCap-OnCore-CrossReference'); // replace with your module directory
+$module->setProjectSetting('running', true);
 $pid = $module->getProjectId();
 
 $project_id = $module->getProjectId();
@@ -10,7 +11,7 @@ $project_id = $module->getProjectId();
 $irb_field = $module->getProjectSetting('irb-field');
 
 // Filter logic example
-$filter = "[".$irb_field."] <> '' AND [sync(1)] <> '1'";
+$filter = "[".$irb_field."] <> '' AND [rocs_sync(1)] <> '1'";
 
 $data = REDCap::getData([
     'project_id' => $pid,

@@ -2,12 +2,10 @@
 /** @var \ExternalModules\AbstractExternalModule $module */
 $page = "field-mapping";
 $instruments = REDCap::getInstrumentNames();
-
-include "scripts/scripts.php";
+$csrf = $module->getCSRFToken();
 ?>
 
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
-<script type="text/javascript" src="<?= $module->getUrl("js/requests.js") ?>"></script>
 
 <div class="d-flex container" style="flex-direction: column;">
     <div class="row selection-btns">
@@ -23,6 +21,7 @@ include "scripts/scripts.php";
     </div>
     <div id="sync_list" class="row" style="flex-direction: column;">
         <div id="msg"></div>
+        <label for="filter">Filter</label>
         <select name="filter" id="filter" onchange="filter(this.value)">
             <option value="all">All</option>
             <option value="adjudicate">Need Attention</option>
@@ -45,15 +44,6 @@ include "scripts/scripts.php";
 </div>
 
 <script>
-    // TODO: fnc that builds records_list table from the flagged records saved in the config
-    // TODO: fnc that loops the checker code from FieldMappings.php
-    // TODO: fnc that fires when a record is selected to allow a user to adjudicate
-
-    /* Save an instance of adjudication for review */
-    function trackInstance() {
-
-    }
-
     // hides records in the adjudicate table based on what's selected
     function filter(value) {
         const body = document.getElementById('sync_list_body');
@@ -76,8 +66,6 @@ include "scripts/scripts.php";
                 }
             }
         }
-
-
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
@@ -106,10 +94,11 @@ include "scripts/scripts.php";
                                             ${each.title.length > 100 ? '<span class="toggle" style="z-index:9999;"> more</span>' : ''}
                                         </p></td>
             <td>${each.status}</td>
-            <td><button>Adjudicate</button><button>Ignore this time</button></td>
+            <td><button onclick="singleRecordSync(${each.record_id})">Adjudicate</button><button onclick="tempIgnore(${each.record_id})">Ignore this time</button><button onclick="fullIgnore(${each.record_id})">Ignore in future Syncs</button></td>
             `;
             row.classList.add(each.status);
             tbody.appendChild(row);
+            row.id = each.record_id;
         }
         const msg = document.getElementById('msg');
         if (metadata) {
@@ -130,6 +119,47 @@ include "scripts/scripts.php";
             });
         }
     });
+
+    function tempIgnore(record_id) {
+        let adjudicates = <?= json_encode($module->getProjectSetting('to-adjudicate')); ?>;
+        adjudicates = adjudicates.filter(record => record.record_id != record_id); // filter should effectively remove the record that was ignored.
+        document.getElementById(record_id).remove();
+        track_adjudicates(adjudicates);
+    }
+
+    function fullIgnore(record_id) {
+        /* as opposed to above fnc, this changes a value in the form added by redcap */
+        const ok = confirm("Are you sure you want to ignore this record in all future syncs?");
+        if (!ok) return;
+
+        // Build the specific REDCap save payload
+        const payload = [{
+            "record_id": record_id,
+            "rocs_sync___1": "1"
+        }];
+
+        $.ajax({
+            url: '<?= $module->getUrl("scripts/save_record.php") ?>',
+            method: 'POST',
+            data: {
+                pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                redcap_csrf_token: <?= json_encode($csrf) ?>,
+                record: JSON.stringify(payload)
+            },
+            success: function (result) {
+                console.log(`Record ${record_id} successfully marked to be ignored in future syncs.`);
+
+                // Since it is now permanently ignored, we also need to drop it from
+                // the current to-adjudicate list and the UI. Your tempIgnore function
+                // already does this perfectly!
+                tempIgnore(record_id);
+            },
+            error: function (xhr, status, error) {
+                console.error("Error updating rocs_sync status:", error, xhr.responseText);
+                alert("There was an error saving this choice to REDCap. Please check the console.");
+            }
+        });
+    }
 
     document.addEventListener("click", function(e) {
         if (!e.target.classList.contains("toggle")) return;

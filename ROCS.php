@@ -209,11 +209,6 @@ class ROCS extends AbstractExternalModule
         return $_SERVER['REQUEST_URI'];
     }
 
-    // Collect mapped forms, ignore records that are
-    function fullSync() {
-
-    }
-
     // Checks for which form we are on and includes instructions for mapping data to fiels on that page
     function redcap_every_page_top($project_id) {
         $this->preconfigure();
@@ -343,6 +338,9 @@ class ROCS extends AbstractExternalModule
                 });
             </script>
             <?php
+        }
+        else if (self::isSyncDashboardPage()) {
+            include 'scripts/scripts.php';
         }
     }
 

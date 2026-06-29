@@ -13,7 +13,7 @@ if (empty($pid) || !is_array($adjudicates)) {
 
 $module->setProjectId($pid);
 $module->setProjectSetting('to-adjudicate', $adjudicates);
-
+$module->setProjectSetting('running', false);
 echo json_encode([
     'status' => 'success',
     'message' => 'All comparisons saved successfully',
