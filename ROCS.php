@@ -10,7 +10,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 
 class ROCS extends AbstractExternalModule
-{   
+{
     public function preconfigure() {
         $init = $this->getProjectSetting('init');
 
@@ -212,6 +212,10 @@ class ROCS extends AbstractExternalModule
     // Checks for which form we are on and includes instructions for mapping data to fiels on that page
     function redcap_every_page_top($project_id) {
         $this->preconfigure();
+
+        // Generate the URL for your AJAX logging endpoint
+        $logAjaxUrl = $this->getUrl('ajax/log_event.php');
+
         // Get the OnCore API base from the project settings
         $oncore_url = $this->getProjectSetting('oncore-base-url');
 
@@ -285,6 +289,8 @@ class ROCS extends AbstractExternalModule
                 const project_title = <?= json_encode($project_title) ?>;
                 const API_URL = <?= json_encode($apiUrl); ?>;
                 const project_id = <?= json_encode($_GET['pid']); ?>;
+                // REDCap sets a global CSRF token we will need later
+                const EM_LOG_URL = '<?= $logAjaxUrl ?>';
             </script>
             <?php
         }
@@ -301,6 +307,8 @@ class ROCS extends AbstractExternalModule
                 const instruments = <?= json_encode($instruments) ?>;
                 const current_page = <?= json_encode($page) ?>;
                 const hyperlink = <?= json_encode($mapping_page) ?>;
+                // REDCap sets a global CSRF token we will need later
+                const EM_LOG_URL = '<?= $logAjaxUrl ?>';
 
                 console.log('You are on a configured sync page.');
                 document.addEventListener('DOMContentLoaded', () => {

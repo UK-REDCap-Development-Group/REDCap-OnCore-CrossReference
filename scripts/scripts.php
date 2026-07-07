@@ -7,9 +7,15 @@ $module = ExternalModules::getModuleInstance('REDCap-OnCore-CrossReference'); //
 $csrf = $module->getCSRFToken();
 
 $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
+
+// Generate the URL for your AJAX logging endpoint
+$logAjaxUrl = $this->getUrl('ajax/log_event.php');
 ?>
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
 <script>
+    // REDCap sets a global CSRF token we will need later
+    const EM_LOG_URL = '<?= $logAjaxUrl ?>';
+
     const irb_field = <?= json_encode($module->getProjectSetting('irb_field') ?? 'eirb_number') ?>;
 
     const buildAPI = (protocolId) => ({
@@ -215,6 +221,10 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
                 },
                 success: function (result) {
                     console.log("Checkpoint saved:", result);
+
+                    logModuleEvent("Data saved to REDCap Database", {
+                        record_id: record.record_id,
+                    });
                 },
                 error: function (xhr, status, error) {
                     console.error("Error in checkpoint:", error, xhr.responseText);
@@ -359,6 +369,11 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
             },
             error: function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
+
+                logModuleEvent("Error fetching REDCap record", {
+                    error: error,
+                    xhr: xhr.responseText
+                });
             }
         });
     }
@@ -622,9 +637,15 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
             success: function (data) {
                 console.log(data.message);
                 console.log(data.data);
+                logModuleEvent("Adjudicates added", {
+                });
             },
             error: function (xhr, status, error) {
                 console.error('Error saving comparisons:', error, xhr.responseText);
+                logModuleEvent("Adjudicated failed to be added.", {
+                    error: error,
+                    xhr: xhr.responseText
+                });
             }
         });
     }
@@ -662,5 +683,42 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
             }
         });
     }
+
+    /**
+     * Triggers an external module log entry via AJAX
+     * @param {string} actionName - The main log message
+     * @param {object} paramsObject - The key/value parameters to log
+     */
+    async function logModuleEvent(actionName, paramsObject) {
+        try {
+            // Prepare the data payload
+            const formData = new FormData();
+            formData.append('action', actionName);
+            formData.append('params', JSON.stringify(paramsObject));
+
+            // CRITICAL: Attach REDCap's security token
+            formData.append('redcap_csrf_token', window.redcap_csrf_token);
+
+            // Send the request to your PHP endpoint
+            const response = await fetch(EM_LOG_URL, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) throw new Error("Network response was not ok");
+
+            const result = await response.json();
+            console.log("Successfully logged event.");
+
+        } catch (error) {
+            console.error("Failed to log module event:", error);
+        }
+    }
+
+    // Example Usage:
+    // logModuleEvent("Manual Record Sync Initiated", {
+    //      record_id: "405",
+    //      direction: "push_to_oncore"
+    // });
 
 </script>

@@ -150,8 +150,7 @@ $csrf = $module->getCSRFToken();
                 console.log(`Record ${record_id} successfully marked to be ignored in future syncs.`);
 
                 // Since it is now permanently ignored, we also need to drop it from
-                // the current to-adjudicate list and the UI. Your tempIgnore function
-                // already does this perfectly!
+                // the current to-adjudicate list and the UI.
                 tempIgnore(record_id);
             },
             error: function (xhr, status, error) {
