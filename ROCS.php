@@ -9,42 +9,120 @@ use REDCap;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 
+require_once __DIR__ . '/REDCapHelper.php';
+
 class ROCS extends AbstractExternalModule
 {
-    public function preconfigure() {
-        $init = $this->getProjectSetting('init');
-
-        if (!$init) {
-            $host = $_SERVER['HTTP_HOST'];
-
-            // Set the urls automatically to UK OnCore if we are on a UK domain
-            if (preg_match("/\.uky\.edu/", $host)) {
-                $this->setProjectSetting('oncore-token-url', 'https://uky-oncore-prod.forteresearchapps.com/forte-platform-web/api/oauth/token');
-                $this->setProjectSetting('oncore-api-url', 'https://uky-oncore-prod.forteresearchapps.com/oncore-api/rest/');
-            }
-
-            $instruments = REDCap::getInstrumentNames();
-
-            if (array_key_exists('demographics', $instruments) && array_key_exists('regulatory', $instruments)) {
-                $this->setProjectSetting('sync-page', ['demographics', 'regulatory']);
-            }
-
-            $data_dict = REDCap::getDataDictionary();
-
-            global $Proj;
-
-            // $Proj->metadata is an array of all fields
-            if (isset($Proj->metadata['eirb_number'])) {
-                $this->setProjectSetting('irb-field', 'eirb_number');
-            }
-
-            if (isset($Proj->metadata['full_title'])) {
-                $this->setProjectSetting('title-field', 'full_title');
-            }
-
-            $this->setProjectSetting('init', true);
-            $this->setProjectSetting('running', false);
+    public function preconfigure($project_id) {
+        // url check
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        if (preg_match("/\.uky\.edu/", $host)) {
+            $this->setProjectSetting('oncore-token-url', 'https://uky-oncore-prod.forteresearchapps.com/forte-platform-web/api/oauth/token', $project_id);
+            $this->setProjectSetting('oncore-api-url', 'https://uky-oncore-prod.forteresearchapps.com/oncore-api/rest/', $project_id);
         }
+
+        // update data dictionary with helper form
+        $data_dict = \REDCap::getDataDictionary($project_id, 'array');
+        $current_forms = array_unique(array_column($data_dict, 'form_name'));
+        $target_form = 'rocs_helper_form';
+
+        if (!in_array($target_form, $current_forms)) {
+            $new_fields = [
+                'rocs_sync_desc' => [
+                    'field_name' => 'rocs_sync_desc',
+                    'form_name' => $target_form,
+                    'section_header' => '',
+                    'field_type' => 'descriptive',
+                    'field_label' => 'This form is used to track records which have been ignored from future OnCore synchronization, as well as store protocol numbers if they are not already provided in your project.',
+                    'select_choices_or_calculations' => '',
+                    'field_note' => '',
+                    'text_validation_type_or_show_slider_number' => '',
+                    'text_validation_min' => '',
+                    'text_validation_max' => '',
+                    'identifier' => '',
+                    'branching_logic' => '',
+                    'required_field' => '',
+                    'custom_alignment' => '',
+                    'question_number' => '',
+                    'matrix_group_name' => '',
+                    'matrix_ranking' => '',
+                    'field_annotation' => ''
+                ],
+                'rocs_sync' => [
+                    'field_name' => 'rocs_sync',
+                    'form_name' => $target_form,
+                    'section_header' => '',
+                    'field_type' => 'checkbox',
+                    'field_label' => 'Synchronize with OnCore through external module?',
+                    'select_choices_or_calculations' => '1, Opt-Out of Synchronization',
+                    'field_note' => '',
+                    'text_validation_type_or_show_slider_number' => '',
+                    'text_validation_min' => '',
+                    'text_validation_max' => '',
+                    'identifier' => '',
+                    'branching_logic' => '',
+                    'required_field' => '',
+                    'custom_alignment' => '',
+                    'question_number' => '',
+                    'matrix_group_name' => '',
+                    'matrix_ranking' => '',
+                    'field_annotation' => ''
+                ],
+                'rocs_protocol_number' => [
+                    'field_name' => 'rocs_protocol_number',
+                    'form_name' => $target_form,
+                    'section_header' => '',
+                    'field_type' => 'text',
+                    'field_label' => 'Protocol Number',
+                    'select_choices_or_calculations' => '',
+                    'field_note' => '',
+                    'text_validation_type_or_show_slider_number' => '',
+                    'text_validation_min' => '',
+                    'text_validation_max' => '',
+                    'identifier' => '',
+                    'branching_logic' => '',
+                    'required_field' => '',
+                    'custom_alignment' => '',
+                    'question_number' => '',
+                    'matrix_group_name' => '',
+                    'matrix_ranking' => '',
+                    'field_annotation' => ''
+                ]
+            ];
+
+            // Append new fields
+            foreach ($new_fields as $field_name => $field_attributes) {
+                $data_dict[$field_name] = $field_attributes;
+            }
+
+            try {
+                \REDCapHelper::saveDataDictionary($project_id, $data_dict);
+
+                // Set Defaults only AFTER dictionary exists
+                // This is safer because REDCap now recognizes these forms
+                if (in_array('demographics', $current_forms) && in_array('regulatory', $current_forms)) {
+                    $this->setProjectSetting('sync-page', ['demographics', 'regulatory'], $project_id);
+                }
+                if (isset($data_dict['eirb_number'])) {
+                    $this->setProjectSetting('irb-field', 'eirb_number', $project_id);
+                }
+                if (isset($data_dict['full_title'])) {
+                    $this->setProjectSetting('title-field', 'full_title', $project_id);
+                }
+
+                $this->log("Module Initialized Successfully", ['project_id' => $project_id]);
+            } catch (\Exception $e) {
+                $this->log("Module Initialization Failed", ['details' => $e->getMessage()]);
+            }
+        }
+    }
+
+    public function redcap_module_project_enable($project_id) {
+        $this->preconfigure($project_id);
+    }
+
+    public function redcap_module_save_configuration($project_id) {
+        $this->preconfigure($project_id);
     }
 
     // Functional proxy to hit from frontend to communicate with external APIs. Used in proxy.php
@@ -211,8 +289,6 @@ class ROCS extends AbstractExternalModule
 
     // Checks for which form we are on and includes instructions for mapping data to fiels on that page
     function redcap_every_page_top($project_id) {
-        $this->preconfigure();
-
         // Generate the URL for your AJAX logging endpoint
         $logAjaxUrl = $this->getUrl('ajax/log_event.php');
 
@@ -258,14 +334,15 @@ class ROCS extends AbstractExternalModule
         $sync_pages = $this->getProjectSetting('sync-page');
         $is_configured_sync_page = false;
 
-        if (is_array($sync_pages)) {
-            foreach ($sync_pages as $instrument) {
-                if (self::isInstrumentPage($instrument)) {
-                    $is_configured_sync_page = true;
-                    break;
-                }
-            }
+        if (!is_array($sync_pages)) {
+            $sync_pages = $sync_pages ? [$sync_pages] : [];
         }
+
+        $sync_pages = array_filter($sync_pages);
+
+        $current_page = $_GET['page'] ?? '';
+
+        $is_configured_sync_page = (!empty($sync_pages) && in_array($current_page, $sync_pages));
 
         if (self::isFieldMappingPage()) {
             include 'scripts/scripts.php';
@@ -289,13 +366,11 @@ class ROCS extends AbstractExternalModule
                 const project_title = <?= json_encode($project_title) ?>;
                 const API_URL = <?= json_encode($apiUrl); ?>;
                 const project_id = <?= json_encode($_GET['pid']); ?>;
-                // REDCap sets a global CSRF token we will need later
-                const EM_LOG_URL = '<?= $logAjaxUrl ?>';
             </script>
             <?php
         }
         // boolean replaced individual functions for each page, allowing config instead of hardcoding
-        else if ($is_configured_sync_page) {
+        else if (isset($is_configured_sync_page) && $is_configured_sync_page) {
             include 'scripts/scripts.php';
             $mappings = $this->getProjectSetting('field-mappings');
             $page = $_GET['page'];
@@ -307,12 +382,11 @@ class ROCS extends AbstractExternalModule
                 const instruments = <?= json_encode($instruments) ?>;
                 const current_page = <?= json_encode($page) ?>;
                 const hyperlink = <?= json_encode($mapping_page) ?>;
-                // REDCap sets a global CSRF token we will need later
-                const EM_LOG_URL = '<?= $logAjaxUrl ?>';
 
                 console.log('You are on a configured sync page.');
                 document.addEventListener('DOMContentLoaded', () => {
                     const container = document.getElementById('dataEntryTopOptionsButtons');
+
                     const modify = container.children[1];
 
                     const sync_button = document.createElement('button');

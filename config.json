@@ -13,8 +13,14 @@
     "system-settings": [],
     "project-settings": [
         {
-            "key": "email",
+            "key": "adjudicate_email",
             "name": "Input the email(s) you would like to have notified when mismatched are detected. Leaving this field blank disables email notification. Limit 1 email per line.",
+            "type": "text",
+            "repeatable": true
+        },
+        {
+            "key": "oncore_email",
+            "name": "Input the email(s) you would like to have notified when OnCore errors are detected. Leaving this field blank disables email notification. Limit 1 email per line.",
             "type": "text",
             "repeatable": true
         },
@@ -27,7 +33,7 @@
         {
             "key": "title-field",
             "name": "Select the field which contains a title for your record. This will be displayed in the Sync Dashboard. 'full_title' is automatically assigned if present in the project.",
-            "type": "field-list,",
+            "type": "field-list",
             "repeatable": false
         },
         {
@@ -52,7 +58,7 @@
             "key": "oncore-api-url",
             "name": "OnCore API Base URL",
             "type": "text",
-            "requiured": true
+            "required": true
         },
         {
             "key": "secret-client-desc",
@@ -116,12 +122,6 @@
             "key": "adj-metadata",
             "name": "DO NOT EDIT! metadata relating to sync processes",
             "type": "json",
-            "hidden": true
-        },
-        {
-            "key": "init",
-            "name": "If false, run preconfigure.",
-            "type": "checkbox",
             "hidden": true
         },
         {
