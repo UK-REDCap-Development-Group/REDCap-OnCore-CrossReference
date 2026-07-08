@@ -182,6 +182,7 @@ $eirb = $module->getProjectSetting('sample-eirb');
         return { modalOverlay, modalBox };
     }
 
+    // TODO: add a logging call in here to track when forms are added or removed
     // Creates a modal that lets you select which forms you want to sync and ignore the ones you don't want
     function manageForms(instruments, displayed) {
         const built = buildModal();
@@ -541,6 +542,9 @@ $eirb = $module->getProjectSetting('sample-eirb');
         container.innerHTML = '';
         container.appendChild(fragment);
     }
+
+    // TODO: somehow we want to log changes made, but it runs on every individual change currently. Refactor so that we
+    //TODO: cont. ^ benefit from it saving often but that it is only logged by change session.
 
     // Save a snapshot of configurations whenever you want, currently runs on any change
     function checkpoint() {

@@ -13,6 +13,7 @@ require_once __DIR__ . '/REDCapHelper.php';
 
 class ROCS extends AbstractExternalModule
 {
+    // TODO: implement the addition of a module role (or roles?) which can be checked to allow users to see and edit mappings and sync pages
     public function preconfigure($project_id) {
         // url check
         $host = $_SERVER['HTTP_HOST'] ?? '';
@@ -426,4 +427,5 @@ class ROCS extends AbstractExternalModule
         }
     }
 
+    // TODO: implement a function that checks for a specific user role and only allows those users to see any of the configuration or sync options
 }
