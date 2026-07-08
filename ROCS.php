@@ -290,7 +290,7 @@ class ROCS extends AbstractExternalModule
     // Checks for which form we are on and includes instructions for mapping data to fiels on that page
     function redcap_every_page_top($project_id) {
         // Generate the URL for your AJAX logging endpoint
-        $logAjaxUrl = $this->getUrl('ajax/log_event.php');
+        $logAjaxUrl = $this->getUrl('scripts/log_event.php');
 
         // Get the OnCore API base from the project settings
         $oncore_url = $this->getProjectSetting('oncore-base-url');

@@ -9,12 +9,13 @@ $csrf = $module->getCSRFToken();
 $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 
 // Generate the URL for your AJAX logging endpoint
-$logAjaxUrl = $this->getUrl('ajax/log_event.php');
+$logAjaxUrl = $this->getUrl('scripts/log_event.php');
 ?>
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
 <script>
     // REDCap sets a global CSRF token we will need later
-    const EM_LOG_URL = '<?= $logAjaxUrl ?>';
+    window.EM_LOG_URL = '<?= $module->getUrl('scripts/log_event.php') ?>';
+    window.redcap_csrf_token = '<?= $csrf ?>';
 
     const irb_field = <?= json_encode($module->getProjectSetting('irb_field') ?? 'eirb_number') ?>;
 
@@ -90,7 +91,7 @@ $logAjaxUrl = $this->getUrl('ajax/log_event.php');
     /* Table view for comparing source to REDCap data */
     function showComparisonTable(comparisons, record) {
         console.log(record);
-        let selectedValues = record;
+        let selectedValues = { ...record };
 
         // Replace any existing modal before opening a new one
         const existing = document.querySelector('.modal-overlay');
@@ -206,8 +207,14 @@ $logAjaxUrl = $this->getUrl('ajax/log_event.php');
         document.getElementById('overwrite').addEventListener('click', async () => {
             const ok = confirm("WARNING: This action will overwrite existing REDCap data. Please double-check your selections.\n\nClick OK to proceed.");
 
-            if (!ok) {
-                // User cancelled
+            if (!ok) return; // user cancelled
+
+            let jsonPayload;
+            try {
+                jsonPayload = JSON.stringify([selectedValues]);
+            } catch (e) {
+                console.error("Payload contains circular references or invalid data:", selectedValues);
+                alert("System error: Could not process save data.");
                 return;
             }
 
@@ -217,24 +224,37 @@ $logAjaxUrl = $this->getUrl('ajax/log_event.php');
                 data: {
                     pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
                     redcap_csrf_token: <?= json_encode($csrf) ?>,
-                    record: JSON.stringify([selectedValues]) // REDCap expects array
+                    record: jsonPayload // REDCap expects array
                 },
-                success: function (result) {
+                success: async function (result) {
                     console.log("Checkpoint saved:", result);
 
-                    logModuleEvent("Data saved to REDCap Database", {
-                        record_id: record.record_id,
-                    });
+                    try {
+                        await logModuleEvent("Data saved to REDCap Database", {
+                            record_id: record.record_id,
+                            saved_record: jsonPayload
+                        });
+                        console.log("Log sent successfully.");
+                    } catch (err) {
+                        console.error("Log failed, but data was saved:", err);
+                    }
+
+                    closeModal();
+                    window.location.reload();
                 },
-                error: function (xhr, status, error) {
-                    console.error("Error in checkpoint:", error, xhr.responseText);
+                error: async function (xhr, status, error) {
+                    try {
+                        await logModuleEvent("Error occured saving record", {
+                            error: error,
+                            xhr: xhr.responseText
+                        });
+                        console.log("Log sent successfully.");
+                    } catch (err) {
+                        console.error("Log failed, but data was saved:", err);
+                        console.error("Error in checkpoint:", error, xhr.responseText);
+                    }
                 }
             });
-
-            closeModal();
-
-            // Force a reload so that we see updated record info
-            window.location.reload();
         });
     }
 
@@ -367,10 +387,10 @@ $logAjaxUrl = $this->getUrl('ajax/log_event.php');
                 // Run the comparison logic once we have ALL the data
                 runMappingComparison(record, oncoreDataByEndpoint, show);
             },
-            error: function (xhr, status, error) {
+            error: async function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
 
-                logModuleEvent("Error fetching REDCap record", {
+                await logModuleEvent("Error fetching REDCap record", {
                     error: error,
                     xhr: xhr.responseText
                 });
@@ -387,7 +407,7 @@ $logAjaxUrl = $this->getUrl('ajax/log_event.php');
             },
             success: async function (data) {
                 console.log(<?= json_encode($module->getProjectSetting('running')) ?>)
-                // TODO: finish this looping to save records, then figure out how to run it in the background
+                // TODO: figure out how to run it in the background
                 let toSave = [];
                 let protocolId = null;
 
@@ -442,8 +462,6 @@ $logAjaxUrl = $this->getUrl('ajax/log_event.php');
                         });
                     }
 
-                    //toSave.push({'record_id': record.record_id, 'eirb_number': record.eirb_number, 'title': record.full_title, 'results': results, status: 'adjudicate', message: 'OnCore data does not match data in REDCap.'});
-
                     console.log(results);
                 }
 
@@ -460,9 +478,24 @@ $logAjaxUrl = $this->getUrl('ajax/log_event.php');
                 }
                 save_metadata(metadata);
                 track_adjudicates(toSave); // save adjudicates to the config file so that they can be referenced elsewhere
+                try {
+                    await logModuleEvent("Adjudicates collected", {});
+                    console.log("Log sent successfully.");
+                } catch (err) {
+                    console.error("Log failed, but data was saved:", err);
+                }
             },
-            error: function (xhr, status, error) {
+            error: async function (xhr, status, error) {
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
+                try {
+                    await logModuleEvent("Error collecting adjudicates.", {
+                        error: error,
+                        xhr: xhr.responseText
+                    });
+                    console.log("Log sent successfully.");
+                } catch (err) {
+                    console.error("Log failed, but data was saved:", err);
+                }
             }
         });
     }
@@ -634,15 +667,14 @@ $logAjaxUrl = $this->getUrl('ajax/log_event.php');
                 redcap_csrf_token: <?= json_encode($csrf) ?>,
                 'to-adjudicate': JSON.stringify(adjudicates)
             },
-            success: function (data) {
+            success: async function (data) {
                 console.log(data.message);
                 console.log(data.data);
-                logModuleEvent("Adjudicates added", {
-                });
+                await logModuleEvent("Adjudicates added", {});
             },
-            error: function (xhr, status, error) {
+            error: async function (xhr, status, error) {
                 console.error('Error saving comparisons:', error, xhr.responseText);
-                logModuleEvent("Adjudicated failed to be added.", {
+                await logModuleEvent("Adjudicated failed to be added.", {
                     error: error,
                     xhr: xhr.responseText
                 });
@@ -690,28 +722,21 @@ $logAjaxUrl = $this->getUrl('ajax/log_event.php');
      * @param {object} paramsObject - The key/value parameters to log
      */
     async function logModuleEvent(actionName, paramsObject) {
+        // Use the window-scoped variables
+        const formData = new FormData();
+        formData.append('action', actionName);
+        formData.append('params', JSON.stringify(paramsObject));
+        formData.append('redcap_csrf_token', window.redcap_csrf_token);
+
         try {
-            // Prepare the data payload
-            const formData = new FormData();
-            formData.append('action', actionName);
-            formData.append('params', JSON.stringify(paramsObject));
-
-            // CRITICAL: Attach REDCap's security token
-            formData.append('redcap_csrf_token', window.redcap_csrf_token);
-
-            // Send the request to your PHP endpoint
-            const response = await fetch(EM_LOG_URL, {
+            const response = await fetch(window.EM_LOG_URL, {
                 method: 'POST',
                 body: formData
             });
-
-            if (!response.ok) throw new Error("Network response was not ok");
-
             const result = await response.json();
-            console.log("Successfully logged event.");
-
+            console.log("Logged: ", result);
         } catch (error) {
-            console.error("Failed to log module event:", error);
+            console.error("Log failed:", error);
         }
     }
 

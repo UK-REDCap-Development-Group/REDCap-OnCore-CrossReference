@@ -1,26 +1,18 @@
 <?php
-$module = ExternalModules::getModuleInstance('REDCap-OnCore-CrossReference'); // replace with your module directory
+// Manually load REDCap
+require_once dirname(dirname(dirname(dirname(__FILE__)))) . '/redcap_connect.php';
 
-// Ensure this is a valid REDCap request
-if (!defined('REDCap')) exit;
+use ExternalModules\ExternalModules;
 
-// Retrieve the POST data
-$action = $_POST['action'] ?? 'Unknown Frontend Action';
-$paramsRaw = $_POST['params'] ?? '{}';
+// Load the module instance
+$module = ExternalModules::getModuleInstance('REDCap-OnCore-CrossReference');
 
-// Decode the JSON parameters back into a PHP array
-$params = json_decode($paramsRaw, true);
-if (!is_array($params)) {
-    $params = [];
-}
-
-// Automatically append the user who triggered the JS function
+// Log
+$action = $_POST['action'] ?? 'Unknown';
+$params = json_decode($_POST['params'] ?? '{}', true);
 $params['initiated_by'] = defined('USERID') ? USERID : 'system';
 
-// Write to the External Modules log!
 $module->log($action, $params);
 
-// Send a success response back to the JavaScript
 header('Content-Type: application/json');
 echo json_encode(['status' => 'success']);
-?>
