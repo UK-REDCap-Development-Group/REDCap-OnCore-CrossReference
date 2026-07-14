@@ -10,9 +10,14 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 
 // Generate the URL for your AJAX logging endpoint
 $logAjaxUrl = $this->getUrl('scripts/log_event.php');
+
+$user_rights = $module->getUserRights(USERID);
+$can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
 ?>
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
 <script>
+    const canAdjudicate = <?= json_encode($can_adjudicate) ?>;
+
     // REDCap sets a global CSRF token we will need later
     window.EM_LOG_URL = '<?= $module->getUrl('scripts/log_event.php') ?>';
     window.redcap_csrf_token = '<?= $csrf ?>';

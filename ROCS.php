@@ -469,6 +469,10 @@ class ROCS extends AbstractExternalModule
 
         $is_configured_sync_page = (!empty($sync_pages) && in_array($current_page, $sync_pages));
 
+        $user_rights = \REDCap::getUserRights(USERID);
+        $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
+
+        // TODO: go through and implement checks against the above variable to ensure that users without write permissions can't perform adjudications
         if (self::isFieldMappingPage()) {
             include 'scripts/scripts.php';
             $project_id = $_GET['pid'];
@@ -523,7 +527,8 @@ class ROCS extends AbstractExternalModule
                     <i class='fas fa-arrows-rotate'></i>
                     <span>Sync Record with OnCore</span>
                 `
-                    console.log('building ma button')
+
+                    <?php if ($can_adjudicate): ?>
                     if (modify) {
                         container.insertBefore(sync_button, modify.nextSibling);
                     } else {
@@ -542,6 +547,7 @@ class ROCS extends AbstractExternalModule
                             $(`<div title="Mapping Error">No fields are mapped for this Form. Please visit the <a href='${hyperlink}' target="_blank">Field Mappings</a> page to configure mappings between this Form and OnCore.</div>`).dialog();
                         }
                     });
+                    <?php endif; ?>
                 });
             </script>
             <?php

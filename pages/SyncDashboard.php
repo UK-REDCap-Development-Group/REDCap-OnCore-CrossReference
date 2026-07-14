@@ -22,6 +22,9 @@ if (!SUPER_USER && !in_array(USERID, $authorized_users)) {
 
 // Now you can safely render your page
 require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
+
+$user_rights = \REDCap::getUserRights(USERID);
+$can_adjudicate = (SUPER_USER || (isset($all_rights[USERID]) && $all_rights[USERID]['data_entry'] >= 1));
 ?>
 
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
@@ -43,8 +46,8 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
         <label for="filter">Filter</label>
         <select name="filter" id="filter" onchange="filter(this.value)">
             <option value="all">All</option>
-            <option value="adjudicate">Need Attention</option>
-            <option value="missing">Not in OnCore</option>
+            <option value="needs-attention">Need Attention</option>
+            <option value="not-in-OnCore">Not in OnCore</option>
         </select>
         <table class="dataTable cell-border no-footer" id="adjudicate_table">
             <thead>
@@ -53,7 +56,9 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
                     <th>eIRB No.</th>
                     <th>Title (in REDCap)</th>
                     <th>Status</th>
+                    <?php if ($can_adjudicate):?>
                     <th>Actions</th>
+                    <?php endif;?>
                 </tr>
             </thead>
             <tbody id="sync_list_body">
@@ -66,22 +71,17 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
     // hides records in the adjudicate table based on what's selected
     function filter(value) {
         const body = document.getElementById('sync_list_body');
-        let children = [...body.childNodes]; // convert to a JS array so we can perform shift ops
-        children.shift();
+        let rows = [...body.querySelectorAll('tr')];
 
-        for (const each of children) {
+        for (const row of rows) {
             if (value === 'all') {
-                /* show all records */
-                each.classList.remove('hidden');
-            }
-            else {
-                if (!each.classList.contains(value)) {
-                    /* hide any records not matching filter value */
-                    each.classList.add('hidden');
-                }
-                else {
-                    /* unhide records which should be shown according to filter */
-                    each.classList.remove('hidden');
+                row.classList.remove('hidden');
+            } else {
+                // value is already hyphenated because of the <option> value
+                if (!row.classList.contains(value)) {
+                    row.classList.add('hidden');
+                } else {
+                    row.classList.remove('hidden');
                 }
             }
         }
@@ -112,10 +112,13 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
                                             ${each.title.length > 100 ? each.title.slice(0, 100) + '...' : each.title}
                                             ${each.title.length > 100 ? '<span class="toggle" style="z-index:9999;"> more</span>' : ''}
                                         </p></td>
-            <td>${each.status}</td>
-            <td><button onclick="singleRecordSync(${each.record_id})">Adjudicate</button><button onclick="tempIgnore(${each.record_id})">Ignore this time</button><button onclick="fullIgnore(${each.record_id})">Ignore in future Syncs</button></td>
-            `;
-            row.classList.add(each.status);
+            <td>${each.status}</td>`;
+            <?php if ($can_adjudicate):?>
+                row.innerHTML += `<td><button onclick="singleRecordSync(${each.record_id})">Adjudicate</button><button onclick="tempIgnore(${each.record_id})">Ignore this time</button><button onclick="fullIgnore(${each.record_id})">Ignore in future Syncs</button></td>
+                `;
+            <?php endif;?>
+            // Clean the status string by replacing spaces with hyphens
+            row.classList.add(each.status.replace(/\s+/g, '-'));
             tbody.appendChild(row);
             row.id = each.record_id;
         }
