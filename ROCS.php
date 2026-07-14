@@ -99,8 +99,6 @@ class ROCS extends AbstractExternalModule
             try {
                 \REDCapHelper::saveDataDictionary($project_id, $data_dict);
 
-                // Set Defaults only AFTER dictionary exists
-                // This is safer because REDCap now recognizes these forms
                 if (in_array('demographics', $current_forms) && in_array('regulatory', $current_forms)) {
                     $this->setProjectSetting('sync-page', ['demographics', 'regulatory'], $project_id);
                 }
@@ -111,9 +109,42 @@ class ROCS extends AbstractExternalModule
                     $this->setProjectSetting('title-field', 'full_title', $project_id);
                 }
 
-                $this->log("Module Initialized Successfully", ['project_id' => $project_id]);
+                $this->log("Module Initialized Successfully", ['project_id' => $project_id, 'executed_by' => 'system'], $project_id, 'System');
             } catch (\Exception $e) {
-                $this->log("Module Initialization Failed", ['details' => $e->getMessage()]);
+                $this->log("Module Initialization Failed", ['details' => $e->getMessage(), 'executed_by' => 'system'], $project_id, 'System');
+            }
+        }
+
+        //Auto-Assign Project Creator (Self-Healing)
+        $current_users = $this->getProjectSetting('authorized-users', $project_id);
+        if (!is_array($current_users)) $current_users = $current_users ? [$current_users] : [];
+        $current_users = array_filter($current_users);
+
+        if (empty($current_users)) {
+            $creator_sql = "SELECT u.username 
+                    FROM redcap_projects p 
+                    JOIN redcap_user_information u ON p.created_by = u.ui_id 
+                    WHERE p.project_id = ?";
+            $creator_result = $this->query($creator_sql, [$project_id]);
+
+            $creator_username = null;
+            if ($creator_result->num_rows > 0) {
+                $creator_username = $creator_result->fetch_assoc()['username'];
+            } else {
+                $creator_username = defined('USERID') ? USERID : null;
+            }
+
+            if ($creator_username) {
+                $this->setProjectSetting('authorized-users', [$creator_username], $project_id);
+
+                // CRITICAL: Seed the cache so the save hook doesn't log this as a manual addition
+                $this->setProjectSetting('authorized-users-cache', [$creator_username], $project_id);
+
+                $this->log("User Authorized", [
+                    'project_id' => $project_id,
+                    'details' => "System auto-assigned $creator_username to authorized users.",
+                    'executed_by' => "System"
+                ], $project_id, 'System');
             }
         }
     }
@@ -123,6 +154,36 @@ class ROCS extends AbstractExternalModule
     }
 
     public function redcap_module_save_configuration($project_id) {
+        // Audit Logging for Authorized Users
+        $new_users = $this->getProjectSetting('authorized-users', $project_id);
+        if (!is_array($new_users)) $new_users = $new_users ? [$new_users] : [];
+        $new_users = array_filter($new_users);
+
+        $old_users = $this->getProjectSetting('authorized-users-cache', $project_id);
+        if (!is_array($old_users)) $old_users = $old_users ? [$old_users] : [];
+        $old_users = array_filter($old_users);
+
+        $added_users = array_diff($new_users, $old_users);
+        $removed_users = array_diff($old_users, $new_users);
+
+        if (!empty($added_users) || !empty($removed_users)) {
+            $modifier = defined('USERID') ? USERID : 'System';
+            $log_message = "Module Access Updated by $modifier. ";
+
+            if (!empty($added_users)) $log_message .= "Granted to: " . implode(", ", $added_users) . ". ";
+            if (!empty($removed_users)) $log_message .= "Revoked from: " . implode(", ", $removed_users) . ".";
+
+            $this->log("Authorized Users Changed", [
+                'project_id' => $project_id,
+                'initiated_by' => $modifier,
+                'details' => trim($log_message)
+            ]);
+
+            // Update the shadow cache to match the new configuration
+            $this->setProjectSetting('authorized-users-cache', $new_users, $project_id);
+        }
+
+        // Run the rest of the self-healing setup
         $this->preconfigure($project_id);
     }
 
@@ -149,7 +210,7 @@ class ROCS extends AbstractExternalModule
         $clientSecret = $this->getProjectSetting('oncore-secret');
 
         try {
-            // 1. Fetch Token
+            // Fetch Token
             $token_response = $client->post($tokenUrl, [
                 'headers' => [
                     'Content-Type' => 'application/x-www-form-urlencoded',
@@ -178,7 +239,7 @@ class ROCS extends AbstractExternalModule
                 throw new \Exception("Failed to retrieve access token from OnCore.");
             }
 
-            // 2. Make the actual API Request
+            // Make the actual API Request
             $requestOptions = [
                 'headers' => [
                     'Authorization' => "Bearer $access_token",
@@ -290,6 +351,69 @@ class ROCS extends AbstractExternalModule
 
     // Checks for which form we are on and includes instructions for mapping data to fiels on that page
     function redcap_every_page_top($project_id) {
+        // Check authorization
+        $authorized_users = $this->getProjectSetting('authorized-users');
+        if (!is_array($authorized_users)) $authorized_users = $authorized_users ? [$authorized_users] : [];
+
+        $is_authorized = (SUPER_USER || in_array(USERID, $authorized_users));
+
+        if ($is_authorized):
+        ?>
+        <script type="text/javascript">
+            $(document).ready(function() {
+                // Target the main application menu sidebar
+                var $appMenu = $('#app_panel');
+
+                // Check if we already injected these to prevent duplicates
+                if ($appMenu.length && !$('#rocs-custom-app-links').length) {
+                    var linksHtml = `
+                    <div id="rocs-custom-app-links" class="x-panel-header x-panel-header-leftmenu">
+                        <div style="float:left">ROCS Tools</div>
+                        <div class="x-panel-body">
+                            <div class="opacity65 projMenuToggle">
+                                <a href="javascript:;">
+                                    <img src="/redcap/redcap_v16.1.7/Resources/images/toggle-collapse.png" aria-hidden="true">
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="x-panel-bwrap">
+                        <div class="x-panel-body">
+                            <div class="menubox">
+                                <div class="menubox" style="padding-right:0;">
+                                    <div class="hang">
+                                        <a href="<?php echo $this->getUrl('pages/FieldMappings.php'); ?>" style="display:block; padding: 3px 0;">
+                                            <i class="fas fa-right-left"></i> OnCore Mappings
+                                        </a>
+                                    </div>
+                                    <div class="hang">
+                                        <a href="<?php echo $this->getUrl('pages/SyncDashboard.php'); ?>" style="display:block; padding: 3px 0;">
+                                            <i class="fas fa-arrows-rotate"></i> Sync Dashboard
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                    $appMenu.append(linksHtml);
+
+                    // Add the click handler for the new element
+                    $('#rocs-custom-app-links').find('.projMenuToggle').on('click', function() {
+                        var $bwrap = $(this).closest('.x-panel-header').next('.x-panel-bwrap');
+                        if ($bwrap.is(':visible')) {
+                            $bwrap.slideUp();
+                            $(this).find('img').attr('src', '/redcap/redcap_v16.1.7/Resources/images/toggle-expand.png');
+                        } else {
+                            $bwrap.slideDown();
+                            $(this).find('img').attr('src', '/redcap/redcap_v16.1.7/Resources/images/toggle-collapse.png');
+                        }
+                    });
+                }
+
+            });
+        </script>
+        <?php endif;
         // Generate the URL for your AJAX logging endpoint
         $logAjaxUrl = $this->getUrl('scripts/log_event.php');
 

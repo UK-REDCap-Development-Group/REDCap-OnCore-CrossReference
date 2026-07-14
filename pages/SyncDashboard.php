@@ -1,8 +1,27 @@
-<?php
+<?php global $project_id;
 /** @var \ExternalModules\AbstractExternalModule $module */
 $page = "field-mapping";
 $instruments = REDCap::getInstrumentNames();
 $csrf = $module->getCSRFToken();
+
+require_once "../../redcap_connect.php";
+
+$authorized_users = $module->getProjectSetting('authorized-users');
+if (!is_array($authorized_users)) $authorized_users = $authorized_users ? [$authorized_users] : [];
+
+// If they aren't on the list, stop right here.
+// They can see the link, but they cannot see the page.
+if (!SUPER_USER && !in_array(USERID, $authorized_users)) {
+    // Show a clean error, not a REDCap "Module Forbidden" screen
+    header('HTTP/1.0 403 Forbidden');
+    echo "<h3>Access Denied</h3>
+      <p>You do not have permission to access ROCS tools. Please contact the project administrator. 
+      <a href='" . APP_PATH_WEBROOT . "index.php?pid=" . $project_id . "'>Return to project home.</a></p>";
+    exit;
+}
+
+// Now you can safely render your page
+require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
 ?>
 
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">

@@ -25,6 +25,18 @@
             "repeatable": true
         },
         {
+            "key": "authorized-users",
+            "name": "Authorized Users",
+            "type": "user-list",
+            "repeatable": true
+        },
+        {
+            "key": "authorized-users-cache",
+            "name": "Authorized Users Cache",
+            "type": "json",
+            "hidden": true
+        },
+        {
             "key": "irb-field",
             "name": "Select which field contains the eIRB/IRB Number for your entries. The app by default looks for 'eirb_number'.",
             "type": "field-list",
@@ -130,38 +142,5 @@
             "type": "checkbox",
             "hidden": true
         }
-    ],
-    "links": {
-        "project": [
-            {
-                "name": "OnCore Field Mappings",
-                "icon": "fas fa-right-left",
-                "url": "pages/FieldMappings.php",
-                "show-header-and-footer": true
-            },
-            {
-                "name": "OnCore Sync Dashboard",
-                "icon": "fas fa-arrows-rotate",
-                "url": "pages/SyncDashboard.php",
-                "show-header-and-footer": true
-            },
-            {
-                "name": "API Test Page",
-                "icon": "fas fa-paper-plane",
-                "url": "pages/TestPage.php",
-                "show-header-and-footer": true
-            }
-        ]
-    },
-    "api-actions": {
-        "example-action": {
-            "description": "This is an example of an action. auth below requires the endpoint to receive a CRS token",
-            "access": ["auth"]
-        }
-    },
-    "no-auth-pages": [
-        "field-mapping",
-        "sync-dashboard",
-        "test-page"
     ]
 }
