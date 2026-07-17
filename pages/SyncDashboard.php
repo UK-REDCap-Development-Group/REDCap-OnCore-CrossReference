@@ -25,8 +25,14 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
 
 $user_rights = \REDCap::getUserRights(USERID);
 $can_adjudicate = (SUPER_USER || (isset($all_rights[USERID]) && $all_rights[USERID]['data_entry'] >= 1));
-?>
 
+echo $module->getProjectSetting('running') . ' lookee here';
+ if($module->getProjectSetting('running')):
+?>
+<script>
+    $(`<div title="System is Currently Running">Records are currently being checked against the OnCore database. The current state is based on data from the last synchronization. It is recommended that you come back in a little while to use the most current information.</div>`).dialog();
+</script>
+<?php endif;?>
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
 
 <div class="d-flex container" style="flex-direction: column;">
@@ -88,22 +94,15 @@ $can_adjudicate = (SUPER_USER || (isset($all_rights[USERID]) && $all_rights[USER
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
-        let running = <?= json_encode($module->getProjectSetting('running')); ?>;
         const adjudicates = <?= json_encode($module->getProjectSetting('to-adjudicate')); ?>;
         const metadata = <?= json_encode($module->getProjectSetting('adj-metadata')); ?>;
 
-        console.log(running);
-
-        if (running) {
-            $(`<div title="System is Currently Running">Records are currently being checked against the OnCore database. The current state is based on data from the last synchronization. It is recommended that you come back in a little while to use the most current information.</div>`).dialog();
-        }
-
-        console.log(adjudicates);
-
+        let running = <?= json_encode($module->getProjectSetting('running')); ?>;
+        console.log('running?: ' + running);
 
         const tbody = document.getElementById('sync_list_body');
         for (const each of adjudicates) {
-            console.log(each)
+            //console.log(each)
             let row = document.createElement('tr');
             row.innerHTML = `
             <td>${each.record_id}</td>

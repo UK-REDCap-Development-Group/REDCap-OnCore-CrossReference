@@ -11,6 +11,15 @@
         }
     ],
     "system-settings": [],
+    "crons": [
+        {
+            "cron_name": "rocs_full_sync",
+            "cron_description": "ROCS background synchronization with OnCore",
+            "method": "rocsCronFullSync",
+            "cron_frequency": "60",
+            "cron_max_run_time": "600"
+        }
+    ],
     "project-settings": [
         {
             "key": "adjudicate_email",
@@ -135,6 +144,60 @@
             "name": "DO NOT EDIT! metadata relating to sync processes",
             "type": "json",
             "hidden": true
+        },
+        {
+            "key": "enable-cron",
+            "name": "Enable Automated Background Synchronization",
+            "type": "checkbox"
+        },
+        {
+            "key": "cron-frequency",
+            "name": "Sync Frequency",
+            "type": "dropdown",
+            "choices": [
+                { "value": "weekly", "name": "Weekly (Default: Saturday)" },
+                { "value": "daily", "name": "Daily" }
+            ],
+            "branchingLogic": {
+                "field": "enable-cron",
+                "value": true
+            }
+        },
+        {
+            "key": "cron-time-desc",
+            "name": "By default, the process will run on Saturday at 2:00 AM (02:00). If you wish to customize this, specify the day and time below.",
+            "type": "descriptive",
+            "branchingLogic": {
+                "field": "enable-cron",
+                "value": true
+            }
+        },
+        {
+            "key": "cron-day",
+            "name": "Custom Day of the Week (if Weekly)",
+            "type": "dropdown",
+            "choices": [
+                { "value": "Saturday", "name": "Saturday" },
+                { "value": "Sunday", "name": "Sunday" },
+                { "value": "Monday", "name": "Monday" },
+                { "value": "Tuesday", "name": "Tuesday" },
+                { "value": "Wednesday", "name": "Wednesday" },
+                { "value": "Thursday", "name": "Thursday" },
+                { "value": "Friday", "name": "Friday" }
+            ],
+            "branchingLogic": {
+                "field": "enable-cron",
+                "value": true
+            }
+        },
+        {
+            "key": "cron-time",
+            "name": "Custom Time (24-hour format, e.g. 02:00)",
+            "type": "text",
+            "branchingLogic": {
+                "field": "enable-cron",
+                "value": true
+            }
         },
         {
             "key": "running",
