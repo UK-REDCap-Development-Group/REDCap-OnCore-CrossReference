@@ -575,16 +575,16 @@ class ROCS extends AbstractExternalModule
 
     public function rocsCronFullSync()
     {
-        // 1. Log that the method was actually invoked
+        // Log that the method was actually invoked
         $this->log("ROCS Cron Method Invoked (System Level)");
 
         $projects = $this->getProjectsWithModuleEnabled();
 
         foreach ($projects as $pid) {
-            // 2. Fetch the raw value of the setting
+            // Fetch the raw value of the setting
             $cronSettingValue = $this->getProjectSetting('enable-cron', $pid);
 
-            // 3. Log what REDCap thinks the checkbox state is
+            // Log what REDCap thinks the checkbox state is
             $this->log("Checking PID $pid for cron status", [
                 'raw_setting_value' => $cronSettingValue,
                 'is_truthy' => (bool)$cronSettingValue
@@ -602,9 +602,10 @@ class ROCS extends AbstractExternalModule
                 $metadata = $this->getProjectSetting('adj-metadata', $pid);
                 $lastRunDate = $metadata['date'] ?? null;
 
-                /*if ($lastRunDate === date('m/d/Y')) {
+                // TODO: enable when not running as a test
+                if ($lastRunDate === date('m/d/Y')) {
                     continue;
-                }*/
+                }
 
                 $shouldRun = true;
 
