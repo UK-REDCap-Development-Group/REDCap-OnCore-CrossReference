@@ -106,8 +106,15 @@ class ROCS extends AbstractExternalModule
                 if (isset($data_dict['eirb_number'])) {
                     $this->setProjectSetting('irb-field', 'eirb_number', $project_id);
                 }
+                if (isset($data_dict['rocs_protocol_number'])) {
+                    $this->setProjectSetting('protocol-field', 'rocs_protocol_number', $project_id);
+                }
                 if (isset($data_dict['full_title'])) {
                     $this->setProjectSetting('title-field', 'full_title', $project_id);
+                    $dashboard_fields = $this->getProjectSetting('dashboard-fields', $project_id);
+                    if (empty($dashboard_fields) || !is_array($dashboard_fields)) {
+                        $this->setProjectSetting('dashboard-fields', ['full_title'], $project_id);
+                    }
                 }
 
                 $this->log("Module Initialized Successfully", ['project_id' => $project_id, 'executed_by' => 'system'], $project_id, 'System');
@@ -700,7 +707,18 @@ class ROCS extends AbstractExternalModule
             ]);
 
             $irb_field = $this->getProjectSetting('irb-field', $pid) ?: 'eirb_number';
-            $filter = "[$irb_field] <> '' AND [rocs_sync(1)] <> '1'";
+            $protocol_field = $this->getProjectSetting('protocol-field', $pid) ?: 'rocs_protocol_number';
+            $raw_dashboard_fields = $this->getProjectSetting('dashboard-fields');
+
+            // Ensure it is an array
+            if (!is_array($raw_dashboard_fields)) {
+                $raw_dashboard_fields = $raw_dashboard_fields ? [$raw_dashboard_fields] : [];
+            }
+
+            // Filter out any empty strings or nulls saved by the UI
+            $dashboard_fields = array_filter($raw_dashboard_fields);
+            
+            $filter = "([$irb_field] <> '' OR [$protocol_field] <> '') AND [rocs_sync(1)] <> '1'";
 
             $records = \REDCap::getData([
                 'project_id' => $pid,
@@ -722,22 +740,53 @@ class ROCS extends AbstractExternalModule
                 $record = $event_data[$event_id];
 
                 $eirb = $record[$irb_field] ?? null;
+                $protocol_number = $record[$protocol_field] ?? null;
                 $title = $record['full_title'] ?? '';
+                
+                $custom_fields = [];
+                foreach ($dashboard_fields as $df) {
+                    $custom_fields[$df] = $record[$df] ?? '';
+                }
 
-                if (!$eirb)
+                if (!$eirb && !$protocol_number)
                     continue;
 
-                $details = $this->fetchOncoreData('protocolManagementDetails?irbNo=' . urlencode($eirb), $pid);
+                if (!empty($protocol_number)) {
+                    $details = $this->fetchOncoreData('protocolManagementDetails?protocolNo=' . urlencode($protocol_number), $pid);
+                } else {
+                    $details = $this->fetchOncoreData('protocolManagementDetails?irbNo=' . urlencode($eirb), $pid);
+                }
 
                 if ($details['success'] && isset($details['data']['protocolId'])) {
                     $protocolId = $details['data']['protocolId'];
+                    $fetchedProtocolNo = $details['data']['protocolNo'] ?? '';
+
+                    // IF protocol_number is empty, and we got a protocolNo from OnCore, auto-save it to REDCap!
+                    if (empty($protocol_number) && !empty($fetchedProtocolNo)) {
+                        $saveData = [
+                            [
+                                \REDCap::getRecordIdField() => $record_id,
+                                $protocol_field => $fetchedProtocolNo
+                            ]
+                        ];
+                        $response = \REDCap::saveData($pid, 'json', json_encode($saveData));
+                        if (empty($response['errors'])) {
+                            $protocol_number = $fetchedProtocolNo;
+                        } else {
+                            $this->log("Error auto-saving protocol number", [
+                                'record_id' => $record_id,
+                                'errors' => json_encode($response['errors'])
+                            ]);
+                        }
+                    }
                 } else {
                     $toSave[] = [
                         'record_id' => (string) $record_id,
-                        'eirb_number' => $eirb,
+                        'eirb_number' => $eirb ?: $protocol_number,
                         'title' => $title,
+                        'custom_fields' => $custom_fields,
                         'status' => 'not in OnCore',
-                        'message' => 'The eIRB/IRB was not found in OnCore.'
+                        'message' => 'The Protocol/IRB was not found in OnCore.'
                     ];
                     continue;
                 }
@@ -814,8 +863,9 @@ class ROCS extends AbstractExternalModule
                 } else {
                     $toSave[] = [
                         'record_id' => (string) $record_id,
-                        'eirb_number' => $eirb,
+                        'eirb_number' => $eirb ?: $protocol_number,
                         'title' => $title,
+                        'custom_fields' => $custom_fields,
                         'results' => $results,
                         'status' => 'needs attention',
                         'message' => 'OnCore data does not match data in REDCap.',

@@ -24,10 +24,25 @@ if (!SUPER_USER && !in_array(USERID, $authorized_users)) {
 require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
 
 $user_rights = \REDCap::getUserRights(USERID);
-$can_adjudicate = (SUPER_USER || (isset($all_rights[USERID]) && $all_rights[USERID]['data_entry'] >= 1));
+// Check if the user has a data_entry string associated with their rights
+$can_adjudicate = (SUPER_USER || !empty($user_rights['data_entry']));
 
-echo $module->getProjectSetting('running') . ' lookee here';
- if($module->getProjectSetting('running')):
+$raw_dashboard_fields = $module->getProjectSetting('dashboard-fields');
+
+if (!is_array($raw_dashboard_fields)) {
+    $raw_dashboard_fields = $raw_dashboard_fields ? [$raw_dashboard_fields] : [];
+}
+
+// Strip out spaces and remove empty entries saved by the UI
+$trimmed_fields = array_map('trim', $raw_dashboard_fields);
+$dashboard_fields = array_filter($trimmed_fields);
+
+// Fallback to default if the filtered array is completely empty
+if (empty($dashboard_fields)) {
+    $dashboard_fields = ['full_title'];
+}
+
+if($module->getProjectSetting('running')):
 ?>
 <script>
     $(`<div title="System is Currently Running">Records are currently being checked against the OnCore database. The current state is based on data from the last synchronization. It is recommended that you come back in a little while to use the most current information.</div>`).dialog();
@@ -60,7 +75,11 @@ echo $module->getProjectSetting('running') . ' lookee here';
                 <tr>
                     <th>Record ID</th>
                     <th>eIRB No.</th>
-                    <th>Title (in REDCap)</th>
+                    <?php if (!empty($dashboard_fields)): ?>
+                        <?php foreach ($dashboard_fields as $df): ?>
+                            <th><?= htmlspecialchars($df) ?></th>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                     <th>Status</th>
                     <?php if ($can_adjudicate):?>
                     <th>Actions</th>
@@ -100,18 +119,36 @@ echo $module->getProjectSetting('running') . ' lookee here';
         let running = <?= json_encode($module->getProjectSetting('running')); ?>;
         console.log('running?: ' + running);
 
+        const dashboard_fields = <?= json_encode($dashboard_fields) ?>;
+
         const tbody = document.getElementById('sync_list_body');
         for (const each of adjudicates) {
             //console.log(each)
             let row = document.createElement('tr');
-            row.innerHTML = `
+            let rowHTML = `
             <td>${each.record_id}</td>
-            <td>${each.eirb_number}</td>
-            <td><p class="citation" data-full="${each.title}">
-                                            ${each.title.length > 100 ? each.title.slice(0, 100) + '...' : each.title}
-                                            ${each.title.length > 100 ? '<span class="toggle" style="z-index:9999;"> more</span>' : ''}
-                                        </p></td>
-            <td>${each.status}</td>`;
+            <td>${each.eirb_number}</td>`;
+            
+            dashboard_fields.forEach(df => {
+                let val = '';
+                if (each.custom_fields && each.custom_fields[df] !== undefined) {
+                    val = each.custom_fields[df];
+                } else if (df === 'full_title') {
+                    val = each.title || '';
+                }
+                
+                if (df === 'full_title' && val.length > 0) {
+                    rowHTML += `<td><p class="citation" data-full="${val}">
+                                    ${val.length > 100 ? val.slice(0, 100) + '...' : val}
+                                    ${val.length > 100 ? '<span class="toggle" style="z-index:9999;"> more</span>' : ''}
+                                </p></td>`;
+                } else {
+                    rowHTML += `<td>${val}</td>`;
+                }
+            });
+            
+            rowHTML += `<td>${each.status}</td>`;
+            row.innerHTML = rowHTML;
             <?php if ($can_adjudicate):?>
                 row.innerHTML += `<td><button onclick="singleRecordSync(${each.record_id})">Adjudicate</button><button onclick="tempIgnore(${each.record_id})">Ignore this time</button><button onclick="fullIgnore(${each.record_id})">Ignore in future Syncs</button></td>
                 `;

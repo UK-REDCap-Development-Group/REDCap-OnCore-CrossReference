@@ -39,7 +39,10 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
     let oncore_fields = null;
     const toSave = {}; // this stores adjudicates and saves them to config
 
-    const eIRBno = <?= json_encode($eirb[0]) ?>;
+    const eIRBno = <?= json_encode($eirb[0] ?? null) ?>;
+    const protocolNoConfig = <?= json_encode($protocol[0] ?? null) ?>;
+    const protocol_field_name = <?= json_encode($module->getProjectSetting('protocol-field') ?: 'rocs_protocol_number') ?>;
+    const irb_field_name = <?= json_encode($module->getProjectSetting('irb-field') ?: 'eirb_number') ?>;
 
     let mappings = false;
     const contactId = ''; // not sure where I might find this
@@ -743,34 +746,52 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
 
             let protocolId = null;
             let protocol = null; // Storing the base protocol data if needed later
-            let protocolNo = null;
+            let protocolNo = protocolNoConfig;
 
-            if (eIRBno) {
-                /* Query the protocols endpoint using irbNo instead of protocolNo */
+            if (protocolNo) {
+                details = await safeFetchOncore('protocolManagementDetails', `&protocolNo=${protocolNo}`);
+                console.log(details);
+
+                if (details.success && details.data) {
+                    console.log("Protocol details fetched by protocolNo:", details.data);
+                    protocol = details;
+                    protocolId = details.data['protocolId'];
+                    console.log("Found Protocol ID:", protocolId);
+                } else {
+                    console.warn("Could not find a protocol with that protocol number.");
+                }
+            }
+            
+            if (!protocolId && eIRBno) {
+                /* Query the protocols endpoint using irbNo */
                 details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${eIRBno}`);
                 console.log(details);
 
                 if (details.success && details.data) {
                     console.log("Protocol details fetched by eIRB:", details.data);
                     protocol = details;
-                    // Assuming data is an object with protocolId. If proxy returns an array,
-                    // you might need details.data[0].protocolId depending on how you parse it.
                     protocolId = details.data['protocolId'];
                     console.log("Found Protocol ID:", protocolId);
                 } else {
                     console.warn("Could not find a protocol with that eIRB number.");
                 }
             }
-            else {
+            
+            if (!protocolId) {
                 /* If they didn't provide eIRBno in settings, loop until we get a hit */
                 // TODO: check records until we get one that actually replies with something
                 let eirb_records = get_eIRBs();
 
-                for (const test_eirb of eirb_records) {
-                    console.log(`Trying eIRB number: ${test_eirb}...`);
+                for (const test_record of eirb_records) {
+                    let test_protocol = test_record[protocol_field_name];
+                    let test_eirb = test_record[irb_field_name];
+                    console.log(`Trying record: ${test_record.record_id}...`);
 
-                    // Try fetching the protocol for the current eIRB in the loop
-                    details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${test_eirb}`);
+                    if (test_protocol) {
+                        details = await safeFetchOncore('protocolManagementDetails', `&protocolNo=${test_protocol}`);
+                    } else if (test_eirb) {
+                        details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${test_eirb}`);
+                    }
 
                     // Check if it succeeded AND actually returned data
                     if (details && details.success && details.data) {

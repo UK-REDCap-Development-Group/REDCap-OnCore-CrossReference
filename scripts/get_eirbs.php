@@ -8,16 +8,21 @@ $pid = $module->getProjectId();
 
 $project_id = $module->getProjectId();
 
-$irb_field = $module->getProjectSetting('irb-field');
+$irb_field = $module->getProjectSetting('irb-field') ?: 'eirb_number';
+$protocol_field = $module->getProjectSetting('protocol-field') ?: 'rocs_protocol_number';
+$dashboard_fields = $module->getProjectSetting('dashboard-fields') ?: [];
+if (!is_array($dashboard_fields)) $dashboard_fields = [];
 
 // Filter logic example
-$filter = "[".$irb_field."] <> '' AND [rocs_sync(1)] <> '1'";
+$filter = "([".$irb_field."] <> '' OR [".$protocol_field."] <> '') AND [rocs_sync(1)] <> '1'";
+
+$fields = array_merge(['record_id', $irb_field, $protocol_field, 'full_title'], $dashboard_fields);
 
 $data = REDCap::getData([
     'project_id' => $pid,
     'return_format' => 'json',
     'filterLogic' => $filter,
-    'fields' => ['record_id', $irb_field, 'full_title']
+    'fields' => $fields
 ]);
 
 // Flatten and return as JSON

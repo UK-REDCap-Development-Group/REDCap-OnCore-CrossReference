@@ -11,7 +11,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 // Generate the URL for your AJAX logging endpoint
 $logAjaxUrl = $this->getUrl('scripts/log_event.php');
 
-$user_rights = $module->getUserRights(USERID);
+$user_rights = \REDCap::getUserRights(USERID);
 $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
 ?>
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
@@ -22,7 +22,9 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
     window.EM_LOG_URL = '<?= $module->getUrl('scripts/log_event.php') ?>';
     window.redcap_csrf_token = '<?= $csrf ?>';
 
-    const irb_field = <?= json_encode($module->getProjectSetting('irb_field') ?? 'eirb_number') ?>;
+    const irb_field = <?= json_encode($module->getProjectSetting('irb-field') ?: 'eirb_number') ?>;
+    const protocol_field = <?= json_encode($module->getProjectSetting('protocol-field') ?: 'rocs_protocol_number') ?>;
+    const dashboard_fields = <?= json_encode($module->getProjectSetting('dashboard-fields') ?: []) ?>;
 
     const buildAPI = (protocolId) => ({
         protocols: `&protocolId=${protocolId}`,
@@ -355,15 +357,35 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
                 let protocolId = null;
                 let record = data[0];
 
-                if (!record[irb_field] || record[irb_field] === "") {
-                    alert('Please ensure to populate the IRB Number field and SAVE the record before attempting to synchronize with OnCore.');
+                if ((!record[irb_field] || record[irb_field] === "") && (!record[protocol_field] || record[protocol_field] === "")) {
+                    alert('Please ensure to populate the Protocol Number or IRB Number field and SAVE the record before attempting to synchronize with OnCore.');
                     return;
                 }
 
-                let details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${record[irb_field]}`);
+                let details;
+                if (record[protocol_field] && record[protocol_field] !== "") {
+                    details = await safeFetchOncore('protocolManagementDetails', `&protocolNo=${record[protocol_field]}`);
+                } else {
+                    details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${record[irb_field]}`);
+                }
 
                 if (details.success && details.data) {
                     protocolId = details.data['protocolId'];
+                    if ((!record[protocol_field] || record[protocol_field] === "") && details.data['protocolNo']) {
+                        let savePayload = {};
+                        savePayload['record_id'] = record.record_id;
+                        savePayload[protocol_field] = details.data['protocolNo'];
+                        $.ajax({
+                            url: "<?= $module->getUrl('scripts/save_record.php'); ?>",
+                            method: "POST",
+                            data: {
+                                pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                                redcap_csrf_token: <?= json_encode($csrf) ?>,
+                                record: JSON.stringify([savePayload])
+                            }
+                        });
+                        record[protocol_field] = details.data['protocolNo'];
+                    }
                 } else {
                     console.warn("Could not find a protocol with that eIRB number.");
                     return; // Stop execution if no protocol is found
@@ -420,14 +442,47 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
                 for (const record of data) {
                     console.log(record);
 
-                    let details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${record[irb_field]}`);
+                    let details;
+                    if (record[protocol_field] && record[protocol_field] !== "") {
+                        details = await safeFetchOncore('protocolManagementDetails', `&protocolNo=${record[protocol_field]}`);
+                    } else {
+                        details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${record[irb_field]}`);
+                    }
                     console.log(details);
 
                     if (details.success && details.data) {
                         protocolId = details.data['protocolId'];
+                        if ((!record[protocol_field] || record[protocol_field] === "") && details.data['protocolNo']) {
+                            let savePayload = {};
+                            savePayload['record_id'] = record.record_id;
+                            savePayload[protocol_field] = details.data['protocolNo'];
+                            $.ajax({
+                                url: "<?= $module->getUrl('scripts/save_record.php'); ?>",
+                                method: "POST",
+                                data: {
+                                    pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                                    redcap_csrf_token: <?= json_encode($csrf) ?>,
+                                    record: JSON.stringify([savePayload])
+                                }
+                            });
+                            record[protocol_field] = details.data['protocolNo'];
+                        }
                     } else {
                         console.warn("Could not find a protocol with that eIRB number.");
-                        toSave.push({'record_id': record.record_id, 'eirb_number': record.eirb_number, 'title': record.full_title, status: 'not in OnCore', message: 'The eIRB/IRB was not found in OnCore.'});
+                        
+                        let custom_fields = {};
+                        dashboard_fields.forEach(df => {
+                            custom_fields[df] = record[df] || '';
+                        });
+
+                        toSave.push({
+                            'record_id': record.record_id, 
+                            'eirb_number': record[irb_field] || record[protocol_field], 
+                            'title': record.full_title, 
+                            'custom_fields': custom_fields,
+                            status: 'not in OnCore', 
+                            message: 'The Protocol/IRB was not found in OnCore.'
+                        });
                         continue; // Stop execution if no protocol is found
                     }
 
@@ -456,11 +511,17 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
                         // Increment the counter for your metadata payload
                         matched++;
                     } else {
+                        let custom_fields = {};
+                        dashboard_fields.forEach(df => {
+                            custom_fields[df] = record[df] || '';
+                        });
+
                         // Only push to 'toSave' if it actually needs adjudication
                         toSave.push({
                             'record_id': record.record_id,
-                            'eirb_number': record.eirb_number,
+                            'eirb_number': record[irb_field] || record[protocol_field],
                             'title': record.full_title,
+                            'custom_fields': custom_fields,
                             'results': results,
                             status: 'needs attention',
                             message: 'OnCore data does not match data in REDCap.'

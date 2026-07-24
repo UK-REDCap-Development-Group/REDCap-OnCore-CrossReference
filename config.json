@@ -52,10 +52,22 @@
             "repeatable": false
         },
         {
+            "key": "protocol-field",
+            "name": "Select which field contains the Protocol Number for your entries. The app by default looks for 'rocs_protocol_number'.",
+            "type": "field-list",
+            "repeatable": false
+        },
+        {
             "key": "title-field",
             "name": "Select the field which contains a title for your record. This will be displayed in the Sync Dashboard. 'full_title' is automatically assigned if present in the project.",
             "type": "field-list",
             "repeatable": false
+        },
+        {
+            "key": "dashboard-fields",
+            "name": "Select additional REDCap fields you would like to display as columns on the Sync Dashboard.",
+            "type": "field-list",
+            "repeatable": true
         },
         {
             "key": "token-url-desc",
