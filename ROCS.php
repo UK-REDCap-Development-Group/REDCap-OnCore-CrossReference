@@ -708,7 +708,7 @@ class ROCS extends AbstractExternalModule
 
             $irb_field = $this->getProjectSetting('irb-field', $pid) ?: 'eirb_number';
             $protocol_field = $this->getProjectSetting('protocol-field', $pid) ?: 'rocs_protocol_number';
-            $raw_dashboard_fields = $this->getProjectSetting('dashboard-fields');
+            $raw_dashboard_fields = $this->getProjectSetting('dashboard-fields', $pid);
 
             // Ensure it is an array
             if (!is_array($raw_dashboard_fields)) {
@@ -765,7 +765,7 @@ class ROCS extends AbstractExternalModule
                     if (empty($protocol_number) && !empty($fetchedProtocolNo)) {
                         $saveData = [
                             [
-                                \REDCap::getRecordIdField() => $record_id,
+                                \REDCap::getRecordIdField($pid) => $record_id,
                                 $protocol_field => $fetchedProtocolNo
                             ]
                         ];

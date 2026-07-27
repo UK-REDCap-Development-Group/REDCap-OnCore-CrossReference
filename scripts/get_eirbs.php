@@ -10,7 +10,7 @@ $project_id = $module->getProjectId();
 
 $irb_field = $module->getProjectSetting('irb-field') ?: 'eirb_number';
 $protocol_field = $module->getProjectSetting('protocol-field') ?: 'rocs_protocol_number';
-$dashboard_fields = $module->getProjectSetting('dashboard-fields') ?: [];
+$dashboard_fields = $module->getProjectSetting('dashboard-fields', $pid) ?: [];
 if (!is_array($dashboard_fields)) $dashboard_fields = [];
 
 // Filter logic example
