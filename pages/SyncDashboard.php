@@ -28,6 +28,7 @@ $user_rights = \REDCap::getUserRights(USERID);
 $can_adjudicate = (SUPER_USER || !empty($user_rights['data_entry']));
 
 $raw_dashboard_fields = $module->getProjectSetting('dashboard-fields');
+$title_field = trim((string) ($module->getProjectSetting('title-field') ?: 'full_title'));
 
 if (!is_array($raw_dashboard_fields)) {
     $raw_dashboard_fields = $raw_dashboard_fields ? [$raw_dashboard_fields] : [];
@@ -39,7 +40,10 @@ $dashboard_fields = array_filter($trimmed_fields);
 
 // Fallback to default if the filtered array is completely empty
 if (empty($dashboard_fields)) {
-    $dashboard_fields = ['full_title'];
+    $dashboard_fields = [$title_field];
+} elseif (!in_array($title_field, $dashboard_fields, true)) {
+    // The configured title is always a dashboard column; additional fields are optional.
+    $dashboard_fields[] = $title_field;
 }
 
 if($module->getProjectSetting('running')):
@@ -120,6 +124,7 @@ if($module->getProjectSetting('running')):
         console.log('running?: ' + running);
 
         const dashboard_fields = <?= json_encode($dashboard_fields) ?>;
+        const title_field = <?= json_encode($title_field) ?>;
 
         const tbody = document.getElementById('sync_list_body');
         for (const each of adjudicates) {
@@ -133,11 +138,11 @@ if($module->getProjectSetting('running')):
                 let val = '';
                 if (each.custom_fields && each.custom_fields[df] !== undefined) {
                     val = each.custom_fields[df];
-                } else if (df === 'full_title') {
+                } else if (df === title_field) {
                     val = each.title || '';
                 }
                 
-                if (df === 'full_title' && val.length > 0) {
+                if (df === title_field && val.length > 0) {
                     rowHTML += `<td><p class="citation" data-full="${val}">
                                     ${val.length > 100 ? val.slice(0, 100) + '...' : val}
                                     ${val.length > 100 ? '<span class="toggle" style="z-index:9999;"> more</span>' : ''}
@@ -150,8 +155,10 @@ if($module->getProjectSetting('running')):
             rowHTML += `<td>${each.status}</td>`;
             row.innerHTML = rowHTML;
             <?php if ($can_adjudicate):?>
-                row.innerHTML += `<td><button onclick="singleRecordSync(${each.record_id})">Adjudicate</button><button onclick="tempIgnore(${each.record_id})">Ignore this time</button><button onclick="fullIgnore(${each.record_id})">Ignore in future Syncs</button></td>
-                `;
+                const actionButtons = each.status.toLowerCase() === 'not in oncore'
+                    ? ''
+                    : `<button onclick="singleRecordSync(${each.record_id})">Adjudicate</button>`;
+                row.innerHTML += `<td>${actionButtons}<button onclick="tempIgnore(${each.record_id})">Ignore this time</button><button onclick="fullIgnore(${each.record_id})">Ignore in future Syncs</button></td>`;
             <?php endif;?>
             // Clean the status string by replacing spaces with hyphens
             row.classList.add(each.status.replace(/\s+/g, '-'));

@@ -575,6 +575,20 @@ class ROCS extends AbstractExternalModule
             <?php
         } else if (self::isSyncDashboardPage()) {
             include 'scripts/scripts.php';
+            // The shared sync script uses these values when the dashboard opens an
+            // adjudication comparison.  Configured record pages define the same
+            // context below, but the dashboard previously omitted it.
+            $mappings = $this->getProjectSetting('field-mappings') ?: [];
+            if (is_string($mappings)) {
+                $mappings = json_decode($mappings, true) ?: [];
+            }
+            ?>
+            <script>
+                const dictionary = <?= json_encode($data_dict) ?>;
+                const mappings = <?= json_encode($mappings) ?>;
+                const instruments = <?= json_encode($instruments) ?>;
+            </script>
+            <?php
         }
     }
 
@@ -708,6 +722,7 @@ class ROCS extends AbstractExternalModule
 
             $irb_field = $this->getProjectSetting('irb-field', $pid) ?: 'eirb_number';
             $protocol_field = $this->getProjectSetting('protocol-field', $pid) ?: 'rocs_protocol_number';
+            $title_field = $this->getProjectSetting('title-field', $pid) ?: 'full_title';
             $raw_dashboard_fields = $this->getProjectSetting('dashboard-fields', $pid);
 
             // Ensure it is an array
@@ -717,6 +732,9 @@ class ROCS extends AbstractExternalModule
 
             // Filter out any empty strings or nulls saved by the UI
             $dashboard_fields = array_filter($raw_dashboard_fields);
+            if (!in_array($title_field, $dashboard_fields, true)) {
+                $dashboard_fields[] = $title_field;
+            }
             
             $filter = "([$irb_field] <> '' OR [$protocol_field] <> '') AND [rocs_sync(1)] <> '1'";
 
@@ -741,7 +759,7 @@ class ROCS extends AbstractExternalModule
 
                 $eirb = $record[$irb_field] ?? null;
                 $protocol_number = $record[$protocol_field] ?? null;
-                $title = $record['full_title'] ?? '';
+                $title = $record[$title_field] ?? '';
                 
                 $custom_fields = [];
                 foreach ($dashboard_fields as $df) {

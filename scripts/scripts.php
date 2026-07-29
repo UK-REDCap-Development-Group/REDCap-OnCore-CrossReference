@@ -24,7 +24,11 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
 
     const irb_field = <?= json_encode($module->getProjectSetting('irb-field') ?: 'eirb_number') ?>;
     const protocol_field = <?= json_encode($module->getProjectSetting('protocol-field') ?: 'rocs_protocol_number') ?>;
-    const dashboard_fields = <?= json_encode($module->getProjectSetting('dashboard-fields') ?: []) ?>;
+    const title_field = <?= json_encode($module->getProjectSetting('title-field') ?: 'full_title') ?>;
+    const dashboard_fields = <?= json_encode(array_values(array_unique(array_merge(
+        (array) ($module->getProjectSetting('dashboard-fields') ?: []),
+        [$module->getProjectSetting('title-field') ?: 'full_title']
+    )))) ?>;
 
     const buildAPI = (protocolId) => ({
         protocols: `&protocolId=${protocolId}`,
@@ -478,7 +482,7 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
                         toSave.push({
                             'record_id': record.record_id, 
                             'eirb_number': record[irb_field] || record[protocol_field], 
-                            'title': record.full_title, 
+                            'title': record[title_field],
                             'custom_fields': custom_fields,
                             status: 'not in OnCore', 
                             message: 'The Protocol/IRB was not found in OnCore.'
@@ -520,7 +524,7 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
                         toSave.push({
                             'record_id': record.record_id,
                             'eirb_number': record[irb_field] || record[protocol_field],
-                            'title': record.full_title,
+                            'title': record[title_field],
                             'custom_fields': custom_fields,
                             'results': results,
                             status: 'needs attention',
