@@ -10,6 +10,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 
 require_once __DIR__ . '/REDCapHelper.php';
+require_once __DIR__ . '/classes/OnCoreFieldPath.php';
 
 class ROCS extends AbstractExternalModule
 {
@@ -696,9 +697,6 @@ class ROCS extends AbstractExternalModule
 
             $data = json_decode($response->getBody()->getContents(), true);
 
-            if (is_array($data) && array_keys($data) === range(0, count($data) - 1)) {
-                $data = !empty($data) ? $data[0] : [];
-            }
             if (!$data)
                 $data = [];
 
@@ -709,6 +707,114 @@ class ROCS extends AbstractExternalModule
         } catch (\Exception $e) {
             return ['success' => false, 'data' => null, 'message' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Add related names to the protocol responses used by background sync.
+     * ProtocolStaff has a contactId and ProtocolSponsor has a sponsorId; the
+     * human-readable data is available from their own API resources.
+     */
+    private function enrichRelatedOncoreData(array $oncoreDataByEndpoint, $pid)
+    {
+        $staff = $this->asOncoreRecords($oncoreDataByEndpoint['protocolStaff'] ?? []);
+        $protocolSponsors = $this->asOncoreRecords($oncoreDataByEndpoint['protocolSponsors'] ?? []);
+
+        $contactIds = array_column($staff, 'contactId');
+        $sponsorIds = array_column($protocolSponsors, 'sponsorId');
+        $contactsById = $this->fetchRelatedOncoreRecords('contacts', $contactIds, $pid);
+        $sponsorsById = $this->fetchRelatedOncoreRecords('sponsors', $sponsorIds, $pid);
+
+        if (isset($oncoreDataByEndpoint['protocolStaff'])) {
+            $oncoreDataByEndpoint['protocolStaff'] = $this->mapOncoreRecords(
+                $oncoreDataByEndpoint['protocolStaff'],
+                function ($staffMember) use ($contactsById) {
+                    $contactId = $staffMember['contactId'] ?? null;
+                    $contact = $contactId === null ? null : ($contactsById[(string) $contactId] ?? null);
+                    if (!$contact) {
+                        return $staffMember;
+                    }
+
+                    $nameParts = array_filter([
+                        $contact['firstName'] ?? null,
+                        $contact['middleName'] ?? null,
+                        $contact['lastName'] ?? null
+                    ], function ($value) {
+                        return $value !== null && $value !== '';
+                    });
+                    if (!empty($nameParts)) {
+                        $contact['displayName'] = implode(' ', $nameParts);
+                    }
+
+                    $staffMember['contact'] = $contact;
+                    return $staffMember;
+                }
+            );
+        }
+
+        if (isset($oncoreDataByEndpoint['protocolSponsors'])) {
+            $oncoreDataByEndpoint['protocolSponsors'] = $this->mapOncoreRecords(
+                $oncoreDataByEndpoint['protocolSponsors'],
+                function ($protocolSponsor) use ($sponsorsById) {
+                    $sponsorId = $protocolSponsor['sponsorId'] ?? null;
+                    $sponsor = $sponsorId === null ? null : ($sponsorsById[(string) $sponsorId] ?? null);
+                    if ($sponsor) {
+                        $protocolSponsor['sponsor'] = $sponsor;
+                    }
+                    return $protocolSponsor;
+                }
+            );
+        }
+
+        return $oncoreDataByEndpoint;
+    }
+
+    private function fetchRelatedOncoreRecords($endpoint, array $ids, $pid)
+    {
+        $recordsById = [];
+        foreach (array_unique(array_filter($ids, function ($id) {
+            return $id !== null && $id !== '';
+        })) as $id) {
+            $response = $this->fetchOncoreData($endpoint . '/' . rawurlencode((string) $id), $pid);
+            if ($response['success'] ?? false) {
+                $record = $response['data'] ?? null;
+                if (is_array($record) && $this->isOncoreRecordList($record)) {
+                    $record = $record[0] ?? null;
+                }
+                if (is_array($record) && !empty($record)) {
+                    $recordsById[(string) $id] = $record;
+                }
+            }
+        }
+
+        return $recordsById;
+    }
+
+    private function asOncoreRecords($data)
+    {
+        if (!is_array($data) || empty($data)) {
+            return [];
+        }
+
+        return $this->isOncoreRecordList($data) ? $data : [$data];
+    }
+
+    private function mapOncoreRecords($data, callable $mapper)
+    {
+        if (!is_array($data) || empty($data)) {
+            return $data;
+        }
+        if ($this->isOncoreRecordList($data)) {
+            return array_map(function ($record) use ($mapper) {
+                return is_array($record) ? $mapper($record) : $record;
+            }, $data);
+        }
+
+        return $mapper($data);
+    }
+
+    private function isOncoreRecordList(array $data)
+    {
+        return !empty($data) && array_keys($data) === range(0, count($data) - 1);
     }
 
     public function performFullSync($pid)
@@ -829,6 +935,7 @@ class ROCS extends AbstractExternalModule
                     $oncoreDataByEndpoint[$protocol] = $res['data'] ?? [];
                     $results[] = ['protocol' => $protocol, 'response' => $res];
                 }
+                $oncoreDataByEndpoint = $this->enrichRelatedOncoreData($oncoreDataByEndpoint, $pid);
 
                 $experimental = [];
                 $totalMappedFields = 0;
@@ -847,18 +954,23 @@ class ROCS extends AbstractExternalModule
 
                         $dict = $oncoreDataByEndpoint[$endpointOrigin] ?? [];
                         $redcapValue = $record[$redcapField] ?? '';
-                        $oncoreValue = $dict[$oncoreFieldName] ?? '';
+
+                        // The mapping reads the whole list; the individual
+                        // entries ride along so the adjudication view can offer
+                        // them one at a time.
+                        $oncoreEntries = OnCoreFieldPath::entries($dict, $oncoreFieldName);
+                        $oncoreValue = implode('; ', array_column($oncoreEntries, 'value'));
 
                         $isUnmapped = false;
                         $redcapSelected = false;
                         $oncoreSelected = false;
 
-                        if ($includeUnmapped && !empty($oncoreValue)) {
+                        if ($includeUnmapped && OnCoreFieldPath::hasValue($oncoreValue)) {
                             $isUnmapped = true;
-                        } else if ($includeUnmapped && empty($oncoreValue)) {
+                        } else if ($includeUnmapped && !OnCoreFieldPath::hasValue($oncoreValue)) {
                             $oncoreValue = '';
                             $isUnmapped = true;
-                        } else if (empty($redcapValue) && !empty($oncoreValue)) {
+                        } else if (empty($redcapValue) && OnCoreFieldPath::hasValue($oncoreValue)) {
                             $oncoreSelected = true;
                         } else if ($redcapValue == $oncoreValue) {
                             $matchedFields++;
@@ -866,10 +978,17 @@ class ROCS extends AbstractExternalModule
                             $redcapSelected = true;
                         }
 
+                        $oncore = ['value' => $oncoreValue, 'selected' => $oncoreSelected];
+
+                        // Only worth carrying when there is a choice to make.
+                        if ($oncoreValue !== '' && count($oncoreEntries) > 1) {
+                            $oncore['options'] = $oncoreEntries;
+                        }
+
                         $form_data[] = [
                             'field_name' => $redcapField,
                             'redcap' => ['value' => $redcapValue, 'selected' => $redcapSelected],
-                            'oncore' => ['value' => $oncoreValue, 'selected' => $oncoreSelected],
+                            'oncore' => $oncore,
                             'unmapped' => $isUnmapped
                         ];
                     }

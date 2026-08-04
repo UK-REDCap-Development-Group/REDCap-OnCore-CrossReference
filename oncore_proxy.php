@@ -16,7 +16,6 @@ if (!defined('PAGE')) define('PAGE', 'ajax');
 header('Content-Type: application/json');
 
 $action = $_GET['action'] ?? ''; // get only the action parameter
-$special = $_GET['special'] ?? ''; // only used in cases where format changes
 
 $params = $_GET; // get every parameter from the url
 
@@ -31,83 +30,41 @@ unset($params['instance']);
 $queryString = http_build_query($params); // rebuild parameters into something we can append to a URL below
 
 try {
-    switch ($action) {
-        case 'protocolManagementDetails':
-            // GET
-            // Query string should be:  irbNo=
-            $response = $module->proxyRequest("/protocolManagementDetails?$queryString");
-            echo $response;
-            break;
+    $queryEndpoints = [
+        'protocolManagementDetails',
+        'protocolConsents',
+        'protocolSponsors',
+        'protocolStaff',
+        'protocolEprmsSubmissions',
+        'protocolPrmcReviews',
+        'protocolIde',
+        'protocolInd',
+        'protocolIrbReviews',
+        'protocolInstitutions',
+        'protocolTasks',
+        'contactCredentials'
+    ];
 
-        case 'protocols':
-            // GET
-            // Query string should be: protocolId=
-            $queryString = explode('=', $queryString)[1];
-            $response = $module->proxyRequest("/protocols/$queryString");
-            echo $response;
-            break;
+    // These API resources use their ID as a path segment rather than a query
+    // parameter. They are used to enrich protocol sponsor/staff records.
+    $pathEndpoints = [
+        'protocols' => 'protocolId',
+        'contacts' => 'contactId',
+        'sponsors' => 'sponsorId'
+    ];
 
-        case 'protocolSponsors':
-            // GET
-            // Query string should be: protocolId= or sponsorProtocolNo=
-            $response = $module->proxyRequest("/protocolSponsors?$queryString");
-            echo $response;
-            break;
-
-        case 'protocolStaff':
-            // GET
-            // Query string should be: protocolId=
-            $response = $module->proxyRequest("/protocolStaff?$queryString");
-            echo $response;
-            break;
-
-        case 'protocolManagementDetails':
-            // GET
-            // Query string requires irbNo
-            $response = $module->proxyRequest("/protocolManagementDetails/".$special);
-            echo $response;
-            break;
-
-        case 'protocolPrmcReviews':
-            // GET
-            $response = $module->proxyRequest("/protocolPrmcReviews?$queryString");
-            echo $response;
-            break;
-
-        case 'protocolTasks':
-            // GET
-            $response = $module->proxyRequest("/protocolTasks?$queryString");
-            echo $response;
-            break;
-
-        case 'protocolInd':
-            // GET
-            $response = $module->proxyRequest("/protocolInd?$queryString");
-            echo $response;
-            break;
-
-        case 'protocolInstitutions':
-            // GET
-            $response = $module->proxyRequest("/protocolInstitutions?$queryString");
-            echo $response;
-            break;
-
-        case 'protocolIrbReviews':
-            // GET
-            $response = $module->proxyRequest("/protocolIrbReviews?$queryString");
-            echo $response;
-            break;
-
-        case 'contactCredentials':
-            // GET
-            // query string should be contactId=
-            $response = $module->proxyRequest("/contactCredentials?$queryString");
-            echo $response;
-            break;
-
-        default:
-            http_response_code(400);
-            echo json_encode(['success' => false, 'message' => 'Invalid or missing action.']);
+    if (isset($pathEndpoints[$action])) {
+        $parameter = $pathEndpoints[$action];
+        $resourceId = $params[$parameter] ?? '';
+        if ($resourceId === '') {
+            throw new \InvalidArgumentException($parameter . ' is required for the ' . $action . ' endpoint.');
+        }
+        echo $module->proxyRequest('/' . $action . '/' . rawurlencode($resourceId));
+    } elseif (in_array($action, $queryEndpoints, true)) {
+        echo $module->proxyRequest('/' . $action . ($queryString === '' ? '' : '?' . $queryString));
+    } else {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Invalid or missing action.']);
     }
 } catch (\Exception $e) {
     echo json_encode(['success' => false, 'code' => $e->getCode(), 'message' => 'Server error: ' . $e->getMessage()]);

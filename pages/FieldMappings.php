@@ -117,14 +117,6 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
             </a>
         </div>
         <div class="col-md-3">
-            <a id="sync-btn" class="center-home-sects">
-                <div class="center-home-sects">
-                    <span><i class="fas fa-arrows-rotate"></i></span><br>
-                    <h5>Sync with OnCore</h5>
-                </div>
-            </a>
-        </div>
-        <div class="col-md-3">
             <a id="upload-btn" class="center-home-sects">
                 <div class="center-home-sects">
                     <span><i class="fas fa-upload"></i></span><br>
@@ -157,14 +149,6 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
                 <div class="center-home-sects">
                     <span><i class="fa fa-plus"></i></span><br>
                     <h5>Manage Forms</h5>
-                </div>
-            </a>
-        </div>
-        <div class="col-md-3">
-            <a id="sync-btn" class="center-home-sects">
-                <div class="center-home-sects">
-                    <span><i class="fas fa-arrows-rotate"></i></span><br>
-                    <h5>Sync with OnCore</h5>
                 </div>
             </a>
         </div>
@@ -496,7 +480,7 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
             header.innerHTML = `<tr>
                                     <th style="width: 25%;">${instrumentLabel} Fields</th>
                                     <th style="width: 35%;">REDCap Field Label</th>
-                                    <th style="width: 25%;">OnCore Field</th>
+                                    <th style="width: 25%;">OnCore Field Path</th>
                                     <th style="width: 15%;">Include, But Don't Adjudicate</th>
                                  </tr>`;
             table.appendChild(header);
@@ -538,21 +522,32 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
                 // Populate select with oncore_fields
                 const selectEl = row.querySelector('select');
                 if (Array.isArray(oncore_fields)) {
+                    const savedMapping = mappedFields[redcapField] || {};
                     oncore_fields.forEach((obj) => {
                         const option = document.createElement('option');
                         option.value = obj.field;
-                        option.textContent = obj.field;
+                        option.textContent = `${obj.endpoint}: ${obj.field}`;
                         option.setAttribute('data-protocol', obj.endpoint);
+                        // A mapping is the broadest reading of the API: []
+                        // takes every value. Picking one of them is done per
+                        // record in the adjudication view.
+                        option.title = obj.field.includes('[]')
+                            ? 'Reads every value returned in this list, joined with "; ". Choose a single value when adjudicating a record.'
+                            : '';
 
-                        // mark selected if it matches the saved mapping
-                        if (mappedFields[redcapField].mapping === obj.field) option.selected = true;
+                        // Endpoint is included to disambiguate common paths,
+                        // while old mappings without an endpoint still load.
+                        if (savedMapping.mapping === obj.field
+                            && (!savedMapping.protocol || savedMapping.protocol === obj.endpoint)) {
+                            option.selected = true;
+                        }
 
                         selectEl.appendChild(option);
                     });
                 }
                 const checkbox = row.querySelector('.include-unmapped');
                 if (checkbox) {
-                    checkbox.checked = mappedFields[redcapField].include_unmapped;
+                    checkbox.checked = Boolean((mappedFields[redcapField] || {}).include_unmapped);
                 }
 
                 fragment.appendChild(table);
@@ -823,10 +818,6 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
         } catch (err) {
             console.error("Unexpected OnCore loading failure:", err);
         }
-
-        document.getElementById('sync-btn').addEventListener('click', () => {
-            fullSync();
-        });
 
         document.getElementById('upload-btn').addEventListener('click', async () => {
             // Remove any existing modal first

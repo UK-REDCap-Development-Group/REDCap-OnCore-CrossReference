@@ -7,6 +7,26 @@ ROCS includes an autosave feature which is triggered when critical actions are p
 
 ROCS provides a ONE-WAY connection allowing data to be pulled from OnCore to REDCap in order to establish a "source of truth".
 
+## OnCore fields and endpoints
+
+ROCS discovers mapping fields from these protocol endpoints: `protocols`, `protocolConsents`, `protocolSponsors`, `protocolStaff`, `protocolEprmsSubmissions`, `protocolPrmcReviews`, `protocolIde`, `protocolInd`, `protocolIrbReviews`, and `protocolInstitutions`. It first uses `protocolManagementDetails` to resolve the protocol ID.
+
+The OnCore Field Mappings page lists scalar fields at every depth of each successful response. Nested object members use dots. ROCS expands `protocolStaff.contactId` through `GET /contacts/{contactId}` and `protocolSponsors.sponsorId` through `GET /sponsors/{sponsorId}`. This makes paths such as `[].contact.displayName`, `[].contact.email`, and `[].sponsor.sponsorName` available for mapping. Existing top-level mappings continue to work.
+
+### Lists, and choosing one value out of one
+
+A mapping is deliberately the broadest reading of the API. When an endpoint returns a list, the mapped path uses `[]` and reads *every* value, with unique values joined by `; ` before being compared with the REDCap field. The Field Mappings page offers nothing narrower, because a mapping has to hold for every record it is applied to.
+
+Choosing one value out of a list is a decision about a single record, so it is made in the adjudication view. When a mapped field comes back with more than one value, the OnCore column of the adjudication table lists them individually above the REDCap value, along with an "All *n* values" choice that keeps the joined list. Whichever is clicked is what gets written to REDCap. The mapping is untouched, so the next sync still compares against the whole list.
+
+Each value is labelled with whichever field best tells the entries of that list apart — a staff list mapped to `[].contact.lastName` shows `Lovelace` under "Principal Investigator". ROCS picks that label field automatically: it must be present on every entry, hold a short non-empty string, not be an identifier (`contactId`, `protocolNo`, `staff_code` and similar are skipped), and not read the same on every entry. Fields whose name ends in `role`, `type`, `category`, `status`, `name`, `position`, or `title` are preferred. A list with no such field still offers its values, just unlabelled.
+
+A path can also be hand-written as `[key=value]` to read only the entry whose `key` equals `value`, e.g. `protocolStaff[staffRole=Principal Investigator].contact.lastName`. Nothing generates that form, but saved mappings using it still resolve. Inside it a backslash escapes the next character, so a value containing `]` or `\` is written `[label=a\]b]`.
+
+Field paths are resolved in two places that must stay in step: `classes/OnCoreFieldPath.php` server-side during a sync, and `discoverOncoreFields`/`oncorePathEntries` in `scripts/scripts.php` in the browser. Both expose the values as `{value, label}` entries; the mapped value is those entries joined, so the comparison and the adjudication choices can never disagree.
+
+The proxy also permits direct `contacts` and `sponsors` lookups, plus `protocolTasks` and `contactCredentials`; task lists and credentials are not part of the default mapping set.
+
 # Pages
 This module contains two custom pages which are necessary for the function/operation of the project.
 ### FieldMappings.php

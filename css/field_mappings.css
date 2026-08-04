@@ -35,6 +35,57 @@
     padding: 8px 12px;
 }
 
+/* Where OnCore returned several values for one mapping, each value is offered
+   individually alongside the whole list. */
+.oncore-options-cell {
+    padding: 4px !important;
+    vertical-align: top;
+}
+
+.oncore-option-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.oncore-option {
+    padding: 4px 8px;
+    border-radius: 3px;
+    border: 1px solid transparent;
+}
+
+.oncore-option:hover {
+    border-color: #b8d3ff;
+}
+
+/* Separates the whole-list choice from the individual values below it. */
+.oncore-option-all {
+    border-bottom: 1px solid #d9d9d9;
+    border-radius: 3px 3px 0 0;
+    margin-bottom: 2px;
+    padding-bottom: 6px;
+}
+
+.oncore-option-label {
+    display: block;
+    font-size: 0.8rem;
+    color: #6b6b6b;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.oncore-option.selected .oncore-option-label {
+    color: #dbe8ff;
+}
+
+.oncore-option-value {
+    display: block;
+    word-break: break-word;
+}
+
 /* Modal Overlay: Dark background behind the popup */
 .modal-overlay {
     position: fixed;
@@ -61,11 +112,70 @@
     text-align: center;
 }
 
-/* Comparison Grid: Displays records side-by-side */
-.modal-comparison-grid {
+/* Adjudication comparison: one table with a section row for each form. */
+.modal-box.modal-comparison-box {
+    width: min(1100px, 94vw);
+    max-width: 1100px;
+    max-height: 90vh;
+    padding: 24px;
+    text-align: left;
+    overflow: hidden;
+}
+
+.modal-comparison-box h1 {
+    margin: 0 0 6px;
+    font-size: 1.8rem;
+}
+
+.modal-comparison-intro {
+    margin: 0 0 18px;
+    font-size: 1rem;
+}
+
+.modal-comparison-table-wrap {
+    max-height: calc(90vh - 190px);
+    overflow: auto;
+    border: 1px solid #ccc;
+}
+
+.modal-comparison-table {
+    width: 100%;
+    min-width: 720px;
+    margin: 0;
+    table-layout: fixed;
+}
+
+.modal-comparison-table th:nth-child(1),
+.modal-comparison-table td:nth-child(1) { width: 17%; }
+.modal-comparison-table th:nth-child(2),
+.modal-comparison-table td:nth-child(2) { width: 33%; }
+.modal-comparison-table th:nth-child(3),
+.modal-comparison-table td:nth-child(3),
+.modal-comparison-table th:nth-child(4),
+.modal-comparison-table td:nth-child(4) { width: 25%; }
+
+.modal-form-section th {
+    width: auto !important;
+    padding: 10px 12px !important;
+    background: #e9ecef;
+    color: #212529;
+    font-size: 1rem;
+    text-align: left;
+}
+
+.modal-comparison-actions {
     display: flex;
-    gap: 2rem;
-    justify-content: space-between;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.modal-comparison-actions button {
+    width: auto;
+    padding: 10px 16px;
+    border: 0;
+    border-radius: 5px;
+    cursor: pointer;
 }
 
 .modal-side {
