@@ -5,18 +5,27 @@ namespace UKModules\ROCS;
 /**
  * Discovers and reads scalar fields in an OnCore API response.
  *
- * Arrays are represented by [] in a field path. For example, a response with
- * {"staff": [{"contact": {"firstName": "Ada"}}]} exposes
- * staff[].contact.firstName. A mapping is deliberately the broadest reading of
- * the API: that path returns every matching value, joined with "; ". Narrowing
- * a multi-value field down to one entry is a per-record decision made in the
- * adjudication view, which is fed by entries().
+ * Nested object members are written with dots. A list can be read three ways,
+ * e.g. for a protocolStaff response:
  *
- * A path may also be hand-written as [key=value] to read only the element whose
- * "key" equals "value", e.g.
- * staff[staffRole=Principal Investigator].contact.firstName. Nothing generates
- * that form, but saved mappings using it still resolve. Inside a selector a
- * backslash escapes the next character; "]" and "\" in a value must be escaped.
+ *  - []                      every entry, joined with "; ", e.g.
+ *                            [].contact.firstName - every staff member.
+ *  - principalInvestigator   only the entries playing that role, e.g.
+ *                            principalInvestigator.contact.firstName. The
+ *                            segment is the entry's role field normalised to
+ *                            camelCase, so a mapping keeps meaning the same
+ *                            thing on every protocol.
+ *  - [staffRole=Principal Investigator]
+ *                            the long-hand of the same idea. Nothing generates
+ *                            it, but saved mappings using it still resolve.
+ *                            Inside it a backslash escapes the next character;
+ *                            "]" and "\" in a value must be escaped.
+ *
+ * Role segments are what keep the module automatic: a field mapped to
+ * principalInvestigator.contact.lastName syncs without anyone choosing a person
+ * per record. [] stays available for genuinely multi-valued fields, and
+ * narrowing one of those to a single entry is a per-record decision made in the
+ * adjudication view, which is fed by entries().
  *
  * Keep this in sync with discoverOncoreFields/oncorePathEntries in
  * scripts/scripts.php, which read the same saved paths in the browser.
@@ -32,12 +41,101 @@ class OnCoreFieldPath
 
     /**
      * A key whose last word is one of these describes the role a list element
-     * plays and is preferred over any other candidate.
+     * plays and is preferred over any other candidate when labelling.
      */
     private static $preferredWords = ['role', 'type', 'category', 'status', 'name', 'position', 'title'];
 
+    /**
+     * Only a key whose last word is one of these may become a path segment.
+     * This is deliberately narrower than $preferredWords: "name" describes a
+     * person, not the part they play, and firstName must never become a path.
+     */
+    private static $roleWords = ['role', 'type', 'category', 'status', 'position', 'title'];
+
     /** Labels longer than this are unwieldy in the adjudication table. */
     const LABEL_MAX_LENGTH = 100;
+
+    /**
+     * Normalise a role value into a path segment: "Principal Investigator" and
+     * "PRINCIPAL_INVESTIGATOR" both become principalInvestigator. Both sides of
+     * a comparison are normalised, so nothing needs escaping.
+     */
+    public static function roleToken($value)
+    {
+        if (!is_string($value)) {
+            return '';
+        }
+
+        $spaced = preg_replace('/([a-z0-9])([A-Z])/', '$1 $2', $value);
+        $words = array_values(array_filter(preg_split('/[^A-Za-z0-9]+/', $spaced), static function ($word) {
+            return $word !== '';
+        }));
+
+        $token = '';
+        foreach ($words as $index => $word) {
+            $token .= $index === 0 ? strtolower($word) : ucfirst(strtolower($word));
+        }
+
+        return $token;
+    }
+
+    /**
+     * The field whose value names the part each entry of a list plays, or null
+     * when the list has no such field. Every entry must carry it as a short
+     * non-empty string, so a role segment always resolves the same way.
+     */
+    public static function roleKey($list)
+    {
+        if (!self::isList($list) || empty($list)) {
+            return null;
+        }
+
+        $first = reset($list);
+        if (!is_array($first)) {
+            return null;
+        }
+
+        $best = null;
+        $bestScore = null;
+
+        foreach (array_keys($first) as $key) {
+            if (is_int($key)) {
+                continue;
+            }
+
+            $word = self::lastWord($key);
+            if (!in_array($word, self::$roleWords, true)) {
+                continue;
+            }
+
+            $usable = true;
+            foreach ($list as $element) {
+                if (!is_array($element) || !array_key_exists($key, $element)) {
+                    $usable = false;
+                    break;
+                }
+
+                $value = $element[$key];
+                if (!is_string($value) || trim($value) === '' || strlen($value) > self::LABEL_MAX_LENGTH
+                    || self::roleToken($value) === '') {
+                    $usable = false;
+                    break;
+                }
+            }
+
+            if (!$usable) {
+                continue;
+            }
+
+            $score = $word === 'role' ? 0 : 1;
+            if ($bestScore === null || $score < $bestScore) {
+                $best = $key;
+                $bestScore = $score;
+            }
+        }
+
+        return $best;
+    }
 
     /**
      * Return every scalar/null field path found in an API response.
@@ -55,6 +153,30 @@ class OnCoreFieldPath
 
     private static function discoverPaths($value, $path, array &$paths)
     {
+        if (self::isList($value)) {
+            // Every list offers [] for all entries and, where the entries say
+            // what part they play, a segment per role so a mapping can name one
+            // without anyone picking a person per record.
+            $roleKey = self::roleKey($value);
+
+            foreach ($value as $child) {
+                self::discoverPaths($child, $path . '[]', $paths);
+
+                if ($roleKey === null) {
+                    continue;
+                }
+
+                $token = self::roleToken($child[$roleKey]);
+                if ($token === '') {
+                    continue;
+                }
+
+                self::discoverPaths($child, $path === '' ? $token : $path . '.' . $token, $paths);
+            }
+
+            return;
+        }
+
         if (is_array($value)) {
             foreach ($value as $key => $child) {
                 // A non-sequential array can still carry integer keys; those
@@ -323,6 +445,24 @@ class OnCoreFieldPath
                     }
                     if (self::stringifyScalar($child[$token['key']]) === $token['value']) {
                         $next[] = ['value' => $child, 'label' => self::joinLabels($entry['label'], $token['value'])];
+                    }
+                }
+            } elseif (self::isList($value)) {
+                // A dotted segment against a list names a role rather than a
+                // field, e.g. principalInvestigator.contact.lastName. Both sides
+                // are normalised, so "Principal Investigator" matches however
+                // OnCore happens to punctuate it.
+                $roleKey = self::roleKey($value);
+                if ($roleKey === null) {
+                    continue;
+                }
+
+                foreach ($value as $child) {
+                    if (!is_array($child) || !array_key_exists($roleKey, $child)) {
+                        continue;
+                    }
+                    if (self::roleToken($child[$roleKey]) === $token['name']) {
+                        $next[] = ['value' => $child, 'label' => self::joinLabels($entry['label'], $child[$roleKey])];
                     }
                 }
             } elseif (is_array($value) && array_key_exists($token['name'], $value)) {

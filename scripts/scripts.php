@@ -43,16 +43,26 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
         protocolInstitutions: `&protocolId=${protocolId}`,
     });
 
-    // Nested object members are written with dots and arrays are written with
-    // [], e.g. staff[].contact.firstName. A mapping is deliberately the broadest
-    // reading of the API: [] returns every value the endpoint gave back, joined
-    // with "; ". Narrowing a multi-value field down to one entry is a per-record
-    // decision and is made in the adjudication view, not here.
+    // Nested object members are written with dots. A list can be read three
+    // ways, e.g. for protocolStaff:
     //
-    // A path may also be hand-written as [key=value] to read only the element
-    // whose "key" equals "value", e.g.
-    // staff[staffRole=Principal Investigator].contact.firstName. Nothing
-    // generates that form, but saved mappings using it still resolve.
+    //   []                          every entry, joined with "; ", e.g.
+    //                               [].contact.firstName - every staff member.
+    //   principalInvestigator       only the entries playing that role, e.g.
+    //                               principalInvestigator.contact.firstName.
+    //                               The segment is the entry's role field
+    //                               normalised to camelCase, so a mapping keeps
+    //                               meaning the same thing on every protocol.
+    //   [staffRole=Principal Investigator]
+    //                               the long-hand of the same idea. Nothing
+    //                               generates it, but saved mappings using it
+    //                               still resolve.
+    //
+    // Role segments are what keep the module automatic: a field mapped to
+    // principalInvestigator.contact.lastName syncs without anyone choosing a
+    // person per record. [] stays available for genuinely multi-valued fields,
+    // and narrowing one of those to a single entry is a per-record decision
+    // made in the adjudication view.
     //
     // Keep this in sync with classes/OnCoreFieldPath.php, which reads the same
     // saved paths server-side during a sync.
@@ -62,9 +72,70 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
     // staff_code are all rejected.
     const ONCORE_IDENTIFIER_WORDS = new Set(['id','ids','guid','uuid','key','code','no','num','number']);
     // A key whose last word is one of these describes the role an element plays
-    // and is preferred over any other candidate.
+    // and is preferred over any other candidate when labelling.
     const ONCORE_PREFERRED_WORDS = new Set(['role','type','category','status','name','position','title']);
+    // Only a key whose last word is one of these may become a path segment.
+    // This is deliberately narrower than the labelling list: "name" describes a
+    // person, not the part they play, and firstName must never become a path.
+    const ONCORE_ROLE_WORDS = new Set(['role','type','category','status','position','title']);
     const ONCORE_LABEL_MAX_LENGTH = 100;
+
+    // Normalise a role value into a path segment: "Principal Investigator" and
+    // "PRINCIPAL_INVESTIGATOR" both become principalInvestigator. Both sides of
+    // a comparison are normalised, so nothing needs escaping.
+    function oncoreRoleToken(value) {
+        if (typeof value !== 'string') return '';
+
+        const words = value
+            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+            .split(/[^A-Za-z0-9]+/)
+            .filter(word => word !== '');
+
+        return words
+            .map((word, index) => index === 0
+                ? word.toLowerCase()
+                : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join('');
+    }
+
+    // The field whose value names the part each entry of a list plays, or null
+    // when the list has no such field. Every entry must carry it as a short
+    // non-empty string, so a role segment always resolves the same way.
+    function oncoreRoleKey(list) {
+        if (!Array.isArray(list) || !list.length) return null;
+
+        const first = list[0];
+        if (!first || typeof first !== 'object' || Array.isArray(first)) return null;
+
+        let best = null;
+        let bestScore = null;
+
+        Object.keys(first).forEach(key => {
+            const word = oncoreKeyLastWord(key);
+            if (!ONCORE_ROLE_WORDS.has(word)) return;
+
+            const usable = list.every(element => {
+                if (!element || typeof element !== 'object' || Array.isArray(element)) return false;
+                if (!Object.prototype.hasOwnProperty.call(element, key)) return false;
+
+                const value = element[key];
+                return typeof value === 'string'
+                    && value.trim() !== ''
+                    && value.length <= ONCORE_LABEL_MAX_LENGTH
+                    && oncoreRoleToken(value) !== '';
+            });
+
+            if (!usable) return;
+
+            const score = word === 'role' ? 0 : 1;
+            if (bestScore === null || score < bestScore) {
+                best = key;
+                bestScore = score;
+            }
+        });
+
+        return best;
+    }
 
     // Last word of a field name, lowercased. Handles camelCase and snake_case,
     // so staffRole, staff_role and StaffRole all yield "role".
@@ -122,7 +193,20 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
 
     function discoverOncoreFields(data, path = '') {
         if (Array.isArray(data)) {
-            return data.flatMap(item => discoverOncoreFields(item, `${path}[]`));
+            // Every list offers [] for all entries and, where the entries say
+            // what part they play, a segment per role so a mapping can name one
+            // without anyone picking a person per record.
+            const roleKey = oncoreRoleKey(data);
+
+            return data.flatMap(item => {
+                const paths = discoverOncoreFields(item, `${path}[]`);
+                if (roleKey === null) return paths;
+
+                const token = oncoreRoleToken(item[roleKey]);
+                if (token === '') return paths;
+
+                return paths.concat(discoverOncoreFields(item, path ? `${path}.${token}` : token));
+            });
         }
 
         if (data && typeof data === 'object') {
@@ -242,6 +326,21 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
                             && Object.prototype.hasOwnProperty.call(item, token.key)
                             && stringifyOncoreScalar(item[token.key]) === token.value)
                         .map(item => ({ value: item, label: joinLabels(entry.label, token.value) }));
+                }
+
+                // A dotted segment against a list names a role rather than a
+                // field, e.g. principalInvestigator.contact.lastName. Both
+                // sides are normalised, so "Principal Investigator" matches
+                // however OnCore happens to punctuate it.
+                if (Array.isArray(value)) {
+                    const roleKey = oncoreRoleKey(value);
+                    if (roleKey === null) return [];
+
+                    return value
+                        .filter(item => item
+                            && typeof item === 'object'
+                            && oncoreRoleToken(item[roleKey]) === token.name)
+                        .map(item => ({ value: item, label: joinLabels(entry.label, item[roleKey]) }));
                 }
 
                 return value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, token.name)
@@ -476,31 +575,21 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
                     }
                 }
 
-                /*const oncoreOptionsCell = () => `
-                    <td class="oncore-options-cell">
-                        <ul class="oncore-option-list">
-                            <li class="selectable-cell oncore-option oncore-option-all ${set.oncore.selected ? 'selected' : ''}" data-source="${encodedValue(oncoreValue)}">
-                                <span class="oncore-option-label">All ${options.length} values</span>
-                                <span class="oncore-option-value">${escapeHtml(oncoreValue)}</span>
-                            </li>
-                            ${options.map(option => `
-                                <li class="selectable-cell oncore-option" data-source="${encodedValue(option.value)}">
-                                    ${option.label ? `<span class="oncore-option-label">${escapeHtml(option.label)}</span>` : ''}
-                                    <span class="oncore-option-value">${escapeHtml(option.value)}</span>
-                                </li>
-                            `).join('')}
-                        </ul>
-                    </td>`;*/
-                console.log(options);
+                // A <select> keeps the row compact when OnCore returns a long
+                // list. An <option> cannot hold markup, so the label is folded
+                // into its text. The cell itself carries the current choice and
+                // is what the row's click handler highlights; the dropdown just
+                // rewrites that choice.
+                const optionText = option => option.label
+                    ? `${option.label}: ${option.value}`
+                    : option.value;
+
                 const oncoreOptionsCell = () => `
-                    <td class="oncore-options-cell">
-                        <div>${options.length} possible values detected</div>
-                        <select name="${fieldLabel}-options"  id="${fieldLabel}-options" class="oncore-option-list">
+                    <td class="selectable-cell oncore-options-cell ${set.oncore.selected ? 'selected' : ''}" data-source="${encodedValue(oncoreValue)}" data-all="${encodedValue(oncoreValue)}">
+                        <select class="oncore-option-select" aria-label="Which of the ${options.length} OnCore values to save">
+                            <option value="" selected>All ${options.length} values: ${escapeHtml(oncoreValue)}</option>
                             ${options.map(option => `
-                                <option class="selectable-cell oncore-option" data-source="${encodedValue(option.value)}">
-                                    ${option.label ? `<span class="oncore-option-label">${escapeHtml(option.label)}</span>` : ''}
-                                    <span class="oncore-option-value">${escapeHtml(option.value)}</span>
-                                </option>
+                                <option value="${encodedValue(option.value)}">${escapeHtml(optionText(option))}</option>
                             `).join('')}
                         </select>
                     </td>`;
@@ -553,6 +642,24 @@ $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
                 .forEach(td => td.classList.remove('selected'));
 
             // highlight chosen cell
+            cell.classList.add('selected');
+        });
+
+        // Narrowing a multi-value field to one of its values. The dropdown
+        // rewrites what its cell stands for; choosing an entry also picks the
+        // OnCore side, since that is the only reason to touch it.
+        modalBox.addEventListener('change', (e) => {
+            const select = e.target.closest('.oncore-option-select');
+            if (!select) return;
+
+            const cell = select.closest('.selectable-cell');
+            const row = cell.closest('tr');
+
+            // The whole-list choice carries no value of its own.
+            cell.dataset.source = select.value || cell.dataset.all || '';
+            selectedValues[row.dataset.field] = decodeURIComponent(cell.dataset.source);
+
+            row.querySelectorAll('.selectable-cell').forEach(td => td.classList.remove('selected'));
             cell.classList.add('selected');
         });
 

@@ -35,55 +35,28 @@
     padding: 8px 12px;
 }
 
-/* Where OnCore returned several values for one mapping, each value is offered
-   individually alongside the whole list. */
+/* Where OnCore returned several values for one mapping, the cell holds a
+   dropdown so a long staff list does not stretch the row. The cell is the
+   selectable unit; the dropdown only decides which value it stands for. */
 .oncore-options-cell {
-    padding: 4px !important;
-    vertical-align: top;
+    vertical-align: middle;
 }
 
-.oncore-option-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.oncore-option {
-    padding: 4px 8px;
+.oncore-option-select {
+    width: 100%;
+    max-width: 100%;
+    padding: 4px 6px;
+    border: 1px solid #b8c4d4;
     border-radius: 3px;
-    border: 1px solid transparent;
+    background-color: #fff;
+    color: #333;
+    font-size: 0.95em;
 }
 
-.oncore-option:hover {
-    border-color: #b8d3ff;
-}
-
-/* Separates the whole-list choice from the individual values below it. */
-.oncore-option-all {
-    border-bottom: 1px solid #d9d9d9;
-    border-radius: 3px 3px 0 0;
-    margin-bottom: 2px;
-    padding-bottom: 6px;
-}
-
-.oncore-option-label {
-    display: block;
-    font-size: 0.8rem;
-    color: #6b6b6b;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-}
-
-.oncore-option.selected .oncore-option-label {
-    color: #dbe8ff;
-}
-
-.oncore-option-value {
-    display: block;
-    word-break: break-word;
+/* Keep the control legible once its cell is highlighted. */
+.oncore-options-cell.selected .oncore-option-select {
+    border-color: #1b5fd0;
+    font-weight: normal;
 }
 
 /* Modal Overlay: Dark background behind the popup */

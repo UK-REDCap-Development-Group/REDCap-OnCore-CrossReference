@@ -53,6 +53,104 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
 </script>
 
 <script>
+    // A discovered path can run long - principalInvestigator.contact.lastName -
+    // and a select full of them is hard to read. Split one into its segments so
+    // the display can be shortened. Brackets are kept whole, since a hand
+    // written [staffRole=Ph.D. Advisor] may contain dots of its own.
+    function oncorePathSegments(path) {
+        const segments = [];
+        let buffer = '';
+
+        for (let position = 0; position < path.length; position++) {
+            const character = path[position];
+
+            if (character === '.') {
+                if (buffer !== '') segments.push(buffer);
+                buffer = '';
+                continue;
+            }
+
+            if (character === '[') {
+                if (buffer !== '') segments.push(buffer);
+                buffer = character;
+
+                position++;
+                while (position < path.length && path[position] !== ']') {
+                    if (path[position] === '\\' && position + 1 < path.length) {
+                        buffer += path[position];
+                        position++;
+                    }
+                    buffer += path[position];
+                    position++;
+                }
+
+                segments.push(buffer + ']');
+                buffer = '';
+                continue;
+            }
+
+            buffer += character;
+        }
+
+        if (buffer !== '') segments.push(buffer);
+
+        return segments;
+    }
+
+    // Show the two segments that identify a mapping - which entry of the list,
+    // and which field of it - and drop whatever sits between them. The full path
+    // stays as the option's value and in its tooltip.
+    function oncoreFieldDisplay(path) {
+        const segments = oncorePathSegments(path);
+        if (segments.length < 2) return path;
+
+        return `${segments[0]} · ${segments[segments.length - 1]}`;
+    }
+
+    // Build one <option>, shortened for display and carrying the full path in
+    // its value, its tooltip and data-protocol (which save/load both read).
+    function oncoreFieldOption(obj) {
+        const option = document.createElement('option');
+        option.value = obj.field;
+        option.textContent = oncoreFieldDisplay(obj.field);
+        option.setAttribute('data-protocol', obj.endpoint);
+
+        // [] takes every value in a list; a role segment such as
+        // principalInvestigator takes only that person's, which is what lets
+        // the field sync without adjudication.
+        const note = obj.field.includes('[]')
+            ? '\n\nReads every value returned in this list, joined with "; ". Choose a single value when adjudicating a record, or map a role instead.'
+            : '';
+        option.title = `${obj.endpoint}: ${obj.field}${note}`;
+
+        return option;
+    }
+
+    // Append every discovered field, grouped under its endpoint so the endpoint
+    // name appears once as a heading rather than on every line. Grouping does
+    // not affect select.options, which stays flat for selectedIndex lookups.
+    function appendOncoreFieldOptions(selectEl, fields, onOption) {
+        if (!Array.isArray(fields)) return;
+
+        // Keyed rather than run-length grouped, so an endpoint appears once even
+        // if the discovered fields ever arrive unsorted.
+        const groups = new Map();
+
+        fields.forEach(obj => {
+            let group = groups.get(obj.endpoint);
+            if (!group) {
+                group = document.createElement('optgroup');
+                group.label = obj.endpoint;
+                selectEl.appendChild(group);
+                groups.set(obj.endpoint, group);
+            }
+
+            const option = oncoreFieldOption(obj);
+            if (onOption) onOption(option, obj);
+            group.appendChild(option);
+        });
+    }
+
     // Function gets called to build the tables which showcase the forms
     function buildTables(keys) {
         const inst_list = document.getElementById('instruments_list');
@@ -317,15 +415,7 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
             `;
 
                     const selectEl = row.querySelector('select');
-                    if (Array.isArray(oncore_fields)) {
-                        oncore_fields.forEach((obj) => {
-                            const option = document.createElement('option');
-                            option.value = obj.field;
-                            option.textContent = obj.field;
-                            option.setAttribute('data-protocol', obj.endpoint);
-                            selectEl.appendChild(option);
-                        });
-                    }
+                    appendOncoreFieldOptions(selectEl, oncore_fields);
 
                     tbody.appendChild(row);
                     i++;
@@ -521,30 +611,15 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
 
                 // Populate select with oncore_fields
                 const selectEl = row.querySelector('select');
-                if (Array.isArray(oncore_fields)) {
-                    const savedMapping = mappedFields[redcapField] || {};
-                    oncore_fields.forEach((obj) => {
-                        const option = document.createElement('option');
-                        option.value = obj.field;
-                        option.textContent = `${obj.endpoint}: ${obj.field}`;
-                        option.setAttribute('data-protocol', obj.endpoint);
-                        // A mapping is the broadest reading of the API: []
-                        // takes every value. Picking one of them is done per
-                        // record in the adjudication view.
-                        option.title = obj.field.includes('[]')
-                            ? 'Reads every value returned in this list, joined with "; ". Choose a single value when adjudicating a record.'
-                            : '';
-
-                        // Endpoint is included to disambiguate common paths,
-                        // while old mappings without an endpoint still load.
-                        if (savedMapping.mapping === obj.field
-                            && (!savedMapping.protocol || savedMapping.protocol === obj.endpoint)) {
-                            option.selected = true;
-                        }
-
-                        selectEl.appendChild(option);
-                    });
-                }
+                const savedMapping = mappedFields[redcapField] || {};
+                appendOncoreFieldOptions(selectEl, oncore_fields, (option, obj) => {
+                    // Endpoint is included to disambiguate common paths,
+                    // while old mappings without an endpoint still load.
+                    if (savedMapping.mapping === obj.field
+                        && (!savedMapping.protocol || savedMapping.protocol === obj.endpoint)) {
+                        option.selected = true;
+                    }
+                });
                 const checkbox = row.querySelector('.include-unmapped');
                 if (checkbox) {
                     checkbox.checked = Boolean((mappedFields[redcapField] || {}).include_unmapped);

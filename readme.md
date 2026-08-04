@@ -13,15 +13,38 @@ ROCS discovers mapping fields from these protocol endpoints: `protocols`, `proto
 
 The OnCore Field Mappings page lists scalar fields at every depth of each successful response. Nested object members use dots. ROCS expands `protocolStaff.contactId` through `GET /contacts/{contactId}` and `protocolSponsors.sponsorId` through `GET /sponsors/{sponsorId}`. This makes paths such as `[].contact.displayName`, `[].contact.email`, and `[].sponsor.sponsorName` available for mapping. Existing top-level mappings continue to work.
 
-### Lists, and choosing one value out of one
+### Lists, roles, and choosing one value
 
-A mapping is deliberately the broadest reading of the API. When an endpoint returns a list, the mapped path uses `[]` and reads *every* value, with unique values joined by `; ` before being compared with the REDCap field. The Field Mappings page offers nothing narrower, because a mapping has to hold for every record it is applied to.
+Endpoints like `protocolStaff` return a list, often a long one. The Field Mappings dropdown offers two ways to read it:
 
-Choosing one value out of a list is a decision about a single record, so it is made in the adjudication view. When a mapped field comes back with more than one value, the OnCore column of the adjudication table lists them individually above the REDCap value, along with an "All *n* values" choice that keeps the joined list. Whichever is clicked is what gets written to REDCap. The mapping is untouched, so the next sync still compares against the whole list.
+| Path form | Reads | Example |
+| --- | --- | --- |
+| `[]` | every entry, unique values joined with `; ` | `[].contact.lastName` → every staff member |
+| a role segment | only the entries playing that part | `principalInvestigator.contact.lastName` → the PI |
 
-Each value is labelled with whichever field best tells the entries of that list apart — a staff list mapped to `[].contact.lastName` shows `Lovelace` under "Principal Investigator". ROCS picks that label field automatically: it must be present on every entry, hold a short non-empty string, not be an identifier (`contactId`, `protocolNo`, `staff_code` and similar are skipped), and not read the same on every entry. Fields whose name ends in `role`, `type`, `category`, `status`, `name`, `position`, or `title` are preferred. A list with no such field still offers its values, just unlabelled.
+Role segments are what keep the module automatic. A field mapped to `principalInvestigator.contact.lastName` resolves to one person on every protocol and syncs without anyone choosing a name per record, which is the whole point of mapping a list at all. `[]` remains right for genuinely multi-valued fields — a field holding all coordinators, say.
 
-A path can also be hand-written as `[key=value]` to read only the entry whose `key` equals `value`, e.g. `protocolStaff[staffRole=Principal Investigator].contact.lastName`. Nothing generates that form, but saved mappings using it still resolve. Inside it a backslash escapes the next character, so a value containing `]` or `\` is written `[label=a\]b]`.
+The segment is the entry's role value normalised to camelCase, and both sides of the comparison are normalised, so `Principal Investigator`, `PRINCIPAL_INVESTIGATOR`, and `principal investigator` are the same segment. A saved mapping therefore means the same thing on every protocol regardless of order, length, or punctuation. If a protocol has nobody in that role the field reads as empty rather than falling back to somebody else; if it has two, both values are returned and joined.
+
+ROCS picks the role field automatically. It must be present on every entry as a short non-empty string, and its name must end in `role`, `type`, `category`, `status`, `position`, or `title` — `staffRole` and `consentType` qualify, `firstName` and `contactId` deliberately do not, so a person's name can never become a path segment. `role` wins over the others when a list has more than one candidate. A list with no such field offers only `[]`.
+
+#### How the dropdown displays a path
+
+Full paths run long, so each option is shortened to the two segments that identify it — which entry of the list, and which field of that entry — with anything between them dropped: `principalInvestigator.contact.lastName` displays as `principalInvestigator · lastName`. The first segment is kept rather than simply taking the last two, because `principalInvestigator.contact.lastName` and `studyCoordinator.contact.lastName` would otherwise both read `contact.lastName`.
+
+Options are grouped under their endpoint using `<optgroup>`, so `protocolStaff` appears once as a heading instead of prefixing every line. Hovering an option shows the endpoint and the untruncated path; the saved mapping is always the full path, never the shortened display.
+
+#### Choosing between values during adjudication
+
+A field mapped with `[]` can still come back with several values, and picking one of them is a decision about a single record rather than about the mapping. When that happens, the OnCore column of the adjudication table holds a dropdown: it defaults to "All *n* values" (the joined list) and lists each value individually below, labelled with whatever tells the entries apart — `Principal Investigator: Lovelace`. Whichever is chosen is what gets written to REDCap. The mapping is untouched, so the next sync still compares against the whole list.
+
+The label field is chosen by a slightly broader rule than the role segment: it may also end in `name`, and it must not read the same on every entry. A list with no such field still offers its values, just unlabelled.
+
+#### Long-hand selectors
+
+A path can also be hand-written as `[key=value]` to read only the entry whose `key` equals `value`, e.g. `protocolStaff[staffRole=Principal Investigator].contact.lastName`. Nothing generates that form now that role segments exist, but saved mappings using it still resolve. Inside it a backslash escapes the next character, so a value containing `]` or `\` is written `[label=a\]b]`.
+
+#### Where this lives
 
 Field paths are resolved in two places that must stay in step: `classes/OnCoreFieldPath.php` server-side during a sync, and `discoverOncoreFields`/`oncorePathEntries` in `scripts/scripts.php` in the browser. Both expose the values as `{value, label}` entries; the mapped value is those entries joined, so the comparison and the adjudication choices can never disagree.
 
