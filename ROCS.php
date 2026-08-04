@@ -595,65 +595,130 @@ class ROCS extends AbstractExternalModule
 
     // TODO: implement a function that checks for a specific user role and only allows those users to see any of the configuration or sync options
 
+    /**
+     * Invoked by REDCap about once a minute (see "crons" in config.json). Each
+     * tick works out whether a project is due rather than assuming it is: the
+     * frequency setting says which days qualify, and the time setting says how
+     * early in the day a run may start.
+     *
+     * A tick at or after the target time runs, not only one landing inside the
+     * target hour, so a stalled system cron or an overrunning job makes a sync
+     * late rather than skipping the day outright.
+     *
+     * The day is claimed in "last-cron-run" before the sync begins, because a
+     * full sync easily outlives the minute it started in and the next tick must
+     * not start a second copy. That setting is deliberately separate from
+     * "adj-metadata": scripts/save_metadata.php writes the latter after a manual
+     * sync from the dashboard, which should not cancel the day's scheduled run.
+     *
+     * Nothing is logged on an ordinary not-yet-due tick. At one tick a minute,
+     * per project, anything logged here would bury the log it is written to.
+     */
     public function rocsCronFullSync()
     {
-        // Log that the method was actually invoked
-        $this->log("ROCS Cron Method Invoked (System Level)");
+        $now = new \DateTime('now', $this->reportingTimezone());
+        $today = $now->format('Y-m-d');
 
-        $projects = $this->getProjectsWithModuleEnabled();
+        foreach ($this->getProjectsWithModuleEnabled() as $pid) {
+            if (!$this->getProjectSetting('enable-cron', $pid)) {
+                continue;
+            }
 
-        foreach ($projects as $pid) {
-            // Fetch the raw value of the setting
-            $cronSettingValue = $this->getProjectSetting('enable-cron', $pid);
+            // Checked first: on all but one of the day's ticks this is why we
+            // stop.
+            if ($this->getProjectSetting('last-cron-run', $pid) === $today) {
+                continue;
+            }
 
-            // Log what REDCap thinks the checkbox state is
-            $this->log("Checking PID $pid for cron status", [
-                'raw_setting_value' => $cronSettingValue,
-                'is_truthy' => (bool)$cronSettingValue
-            ]);
-
-            // Proceed only if truthy
-            if ($cronSettingValue) {
-                $frequency = $this->getProjectSetting('cron-frequency', $pid) ?: 'weekly';
+            $frequency = $this->getProjectSetting('cron-frequency', $pid) ?: 'weekly';
+            if ($frequency !== 'daily') {
                 $day = $this->getProjectSetting('cron-day', $pid) ?: 'Saturday';
-                $time = $this->getProjectSetting('cron-time', $pid) ?: '02:00';
-
-                $currentDay = date('l');
-                $currentHour = date('H');
-
-                $metadata = $this->getProjectSetting('adj-metadata', $pid);
-                $lastRunDate = $metadata['date'] ?? null;
-
-                // TODO: enable when not running as a test
-                if ($lastRunDate === date('m/d/Y')) {
+                if ($now->format('l') !== $day) {
                     continue;
                 }
+            }
 
-                $shouldRun = true;
+            $target = $this->scheduledRunTime($now, $this->getProjectSetting('cron-time', $pid), $pid);
+            if ($now < $target) {
+                continue;
+            }
 
-                $targetHour = explode(':', $time)[0];
+            // Claim the day before starting, not after.
+            $this->setProjectSetting('last-cron-run', $today, $pid);
 
-                if ($frequency === 'daily') {
-                    if ($currentHour == $targetHour) {
-                        $shouldRun = true;
-                    }
-                } else {
-                    if ($currentDay === $day && $currentHour == $targetHour) {
-                        $shouldRun = true;
-                    }
-                }
+            $this->log("ROCS Scheduled Sync Starting", [
+                'project_id' => $pid,
+                'frequency' => $frequency,
+                'scheduled_for' => $target->format('Y-m-d H:i T'),
+                'started_at' => $now->format('Y-m-d H:i T'),
+                'triggered_by' => 'cron'
+            ]);
 
-                if ($shouldRun) {
-                    $this->performFullSync($pid);
-                } else {
-                    // Temporary debug log to see why it skipped
-                    $this->log("Cron Triggered but Skipped Sync", [
-                        'project_id' => $pid,
-                        'details' => "Freq: $frequency. Target: $day at $targetHour. Current: $currentDay at $currentHour."
-                    ]);
-                }
+            $this->performFullSync($pid);
+        }
+    }
+
+    /**
+     * The time zone the schedule is read in. An admin who sets "11:00" means
+     * 11:00 as REDCap reports it, which is not necessarily what the container's
+     * PHP is configured to.
+     */
+    private function reportingTimezone()
+    {
+        $configured = $GLOBALS['timezone'] ?? null;
+
+        if (is_string($configured) && $configured !== '') {
+            try {
+                return new \DateTimeZone($configured);
+            } catch (\Exception $e) {
+                // An unusable value falls through to PHP's own setting, which
+                // REDCap sets from its configuration during initialisation.
             }
         }
+
+        return new \DateTimeZone(date_default_timezone_get());
+    }
+
+    /**
+     * Today's run time, taken from the "cron-time" setting. Accepts 2:00, 02:00
+     * and 0200. Anything unreadable falls back to 02:00 and says so in the log,
+     * rather than quietly running at a time nobody asked for.
+     */
+    private function scheduledRunTime(\DateTime $now, $time, $pid)
+    {
+        $hour = 2;
+        $minute = 0;
+        $raw = trim((string) $time);
+
+        if ($raw !== '') {
+            if (preg_match('/^(\d{1,2})\D?(\d{2})?$/', $raw, $match)) {
+                $parsedHour = (int) $match[1];
+                $parsedMinute = isset($match[2]) ? (int) $match[2] : 0;
+
+                if ($parsedHour <= 23 && $parsedMinute <= 59) {
+                    $hour = $parsedHour;
+                    $minute = $parsedMinute;
+                } else {
+                    $this->log("ROCS Cron Time Out Of Range", [
+                        'project_id' => $pid,
+                        'cron_time' => $raw,
+                        'using' => '02:00'
+                    ]);
+                }
+            } else {
+                $this->log("ROCS Cron Time Unreadable", [
+                    'project_id' => $pid,
+                    'cron_time' => $raw,
+                    'expected' => '24-hour time such as 02:00',
+                    'using' => '02:00'
+                ]);
+            }
+        }
+
+        $target = clone $now;
+        $target->setTime($hour, $minute, 0);
+
+        return $target;
     }
 
     public function fetchOncoreData($apiPath, $pid, $method = 'GET', $payload = [])
@@ -812,16 +877,94 @@ class ROCS extends AbstractExternalModule
         return $mapper($data);
     }
 
+    /** How long a sync's per-record log entries are kept. */
+    const SYNC_LOG_RETENTION_DAYS = 30;
+
     private function isOncoreRecordList(array $data)
     {
         return !empty($data) && array_keys($data) === range(0, count($data) - 1);
     }
 
+    /**
+     * Reduce a response to a single record. Several OnCore endpoints answer a
+     * lookup that can only match once with a list of one, so a caller after a
+     * single record has to unwrap it before reading a field off it. Mirrors
+     * firstOncoreRecord() in scripts/scripts.php.
+     */
+    private function firstOncoreRecord($data)
+    {
+        if (!is_array($data)) {
+            return null;
+        }
+
+        if (!$this->isOncoreRecordList($data)) {
+            return $data;
+        }
+
+        foreach ($data as $record) {
+            if (is_array($record) && !empty($record)) {
+                return $record;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Tag every entry a single sync writes, so one run can be read back as a
+     * unit: queryLogs("... WHERE sync_run = 'rocs-20260804-110002-a1b2c3'")
+     * returns that run and nothing else, the way a per-run log file would.
+     */
+    private function syncRunId($pid)
+    {
+        return sprintf('rocs-%d-%s-%s', $pid, date('Ymd-His'), substr(md5(uniqid('', true)), 0, 6));
+    }
+
+    /**
+     * One entry per record, recording what happened to it and nothing about
+     * what it holds. Record IDs and protocol numbers identify the work; the
+     * clinical values behind a mismatch stay out of the log deliberately.
+     */
+    private function logSyncRecord($runId, $pid, $recordId, $lookedUp, $outcome, array $detail = [])
+    {
+        $this->log("ROCS Sync Record", array_merge([
+            'sync_run' => $runId,
+            'project_id' => $pid,
+            'record_id' => (string) $recordId,
+            'looked_up' => (string) $lookedUp,
+            'outcome' => $outcome
+        ], $detail));
+    }
+
+    /**
+     * Drop sync entries older than the retention window. Scoped to entries
+     * carrying a sync_run tag, so the sparse records of who was authorised and
+     * when the module initialised are left alone.
+     */
+    private function pruneSyncLogs()
+    {
+        $cutoff = date('Y-m-d H:i:s', strtotime('-' . self::SYNC_LOG_RETENTION_DAYS . ' days'));
+
+        try {
+            $this->removeLogs("sync_run IS NOT NULL AND timestamp < ?", [$cutoff]);
+        } catch (\Throwable $e) {
+            // Never let housekeeping stop a sync.
+            $this->log("ROCS Sync Log Prune Failed", [
+                'cutoff' => $cutoff,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
     public function performFullSync($pid)
     {
+        $runId = $this->syncRunId($pid);
+
         try {
+            $this->pruneSyncLogs();
             $this->setProjectSetting('running', true, $pid);
             $this->log("Background Full Sync Started", [
+                'sync_run' => $runId,
                 'project_id' => $pid,
                 'executed_by' => 'System'
             ]);
@@ -872,8 +1015,15 @@ class ROCS extends AbstractExternalModule
                     $custom_fields[$df] = $record[$df] ?? '';
                 }
 
-                if (!$eirb && !$protocol_number)
+                // The filter above should have excluded these; logged rather
+                // than dropped silently so a run's entries account for every
+                // record it counted as checked.
+                if (!$eirb && !$protocol_number) {
+                    $this->logSyncRecord($runId, $pid, $record_id, '', 'skipped', [
+                        'reason' => 'No IRB or protocol number on the record'
+                    ]);
                     continue;
+                }
 
                 if (!empty($protocol_number)) {
                     $details = $this->fetchOncoreData('protocolManagementDetails?protocolNo=' . urlencode($protocol_number), $pid);
@@ -881,9 +1031,31 @@ class ROCS extends AbstractExternalModule
                     $details = $this->fetchOncoreData('protocolManagementDetails?irbNo=' . urlencode($eirb), $pid);
                 }
 
-                if ($details['success'] && isset($details['data']['protocolId'])) {
-                    $protocolId = $details['data']['protocolId'];
-                    $fetchedProtocolNo = $details['data']['protocolNo'] ?? '';
+                // A lookup that can only match one protocol still answers with a
+                // list of one, so unwrap before reading the ID off it.
+                $protocolDetails = $details['success'] ? $this->firstOncoreRecord($details['data']) : null;
+
+                // An unreachable or unauthorised API is not the same thing as a
+                // protocol OnCore does not hold, and must not read as one.
+                if (!$details['success']) {
+                    $this->logSyncRecord($runId, $pid, $record_id, $protocol_number ?: $eirb, 'oncore error', [
+                        'error' => $details['message'] ?? 'Unknown error'
+                    ]);
+
+                    $toSave[] = [
+                        'record_id' => (string) $record_id,
+                        'eirb_number' => $eirb ?: $protocol_number,
+                        'title' => $title,
+                        'custom_fields' => $custom_fields,
+                        'status' => 'oncore error',
+                        'message' => 'OnCore could not be reached: ' . ($details['message'] ?? 'Unknown error')
+                    ];
+                    continue;
+                }
+
+                if (isset($protocolDetails['protocolId'])) {
+                    $protocolId = $protocolDetails['protocolId'];
+                    $fetchedProtocolNo = $protocolDetails['protocolNo'] ?? '';
 
                     // IF protocol_number is empty, and we got a protocolNo from OnCore, auto-save it to REDCap!
                     if (empty($protocol_number) && !empty($fetchedProtocolNo)) {
@@ -898,12 +1070,16 @@ class ROCS extends AbstractExternalModule
                             $protocol_number = $fetchedProtocolNo;
                         } else {
                             $this->log("Error auto-saving protocol number", [
-                                'record_id' => $record_id,
+                                'sync_run' => $runId,
+                                'project_id' => $pid,
+                                'record_id' => (string) $record_id,
                                 'errors' => json_encode($response['errors'])
                             ]);
                         }
                     }
                 } else {
+                    $this->logSyncRecord($runId, $pid, $record_id, $protocol_number ?: $eirb, 'not in OnCore');
+
                     $toSave[] = [
                         'record_id' => (string) $record_id,
                         'eirb_number' => $eirb ?: $protocol_number,
@@ -928,10 +1104,31 @@ class ROCS extends AbstractExternalModule
                     'protocolInstitutions'
                 ];
 
+                // "protocols" addresses a single record by path segment, the way
+                // contacts and sponsors do; the rest filter a collection by
+                // query parameter. oncore_proxy.php draws the same distinction
+                // for the browser in $pathEndpoints.
+                $pathEndpoints = ['protocols'];
+
                 $oncoreDataByEndpoint = [];
                 $results = [];
                 foreach ($endpoints as $protocol) {
-                    $res = $this->fetchOncoreData("$protocol?protocolId=$protocolId", $pid);
+                    $apiPath = in_array($protocol, $pathEndpoints, true)
+                        ? $protocol . '/' . rawurlencode((string) $protocolId)
+                        : $protocol . '?protocolId=' . urlencode((string) $protocolId);
+
+                    $res = $this->fetchOncoreData($apiPath, $pid);
+
+                    if (!($res['success'] ?? false)) {
+                        $this->log("OnCore Endpoint Failed", [
+                            'sync_run' => $runId,
+                            'project_id' => $pid,
+                            'record_id' => (string) $record_id,
+                            'endpoint' => $protocol,
+                            'error' => $res['message'] ?? 'Unknown error'
+                        ]);
+                    }
+
                     $oncoreDataByEndpoint[$protocol] = $res['data'] ?? [];
                     $results[] = ['protocol' => $protocol, 'response' => $res];
                 }
@@ -995,9 +1192,20 @@ class ROCS extends AbstractExternalModule
                     $experimental[$form] = $form_data;
                 }
 
+                // Counts only - which fields differed is in the adjudication
+                // data, where the values belong.
+                $recordDetail = [
+                    'protocol_id' => (string) $protocolId,
+                    'fields_compared' => $totalMappedFields,
+                    'fields_differing' => $totalMappedFields - $matchedFields
+                ];
+
                 if ($totalMappedFields > 0 && $matchedFields == $totalMappedFields) {
                     $matchedCount++;
+                    $this->logSyncRecord($runId, $pid, $record_id, $protocol_number ?: $eirb, 'matched', $recordDetail);
                 } else {
+                    $this->logSyncRecord($runId, $pid, $record_id, $protocol_number ?: $eirb, 'needs attention', $recordDetail);
+
                     $toSave[] = [
                         'record_id' => (string) $record_id,
                         'eirb_number' => $eirb ?: $protocol_number,
@@ -1029,6 +1237,7 @@ class ROCS extends AbstractExternalModule
 
             // Keep json_encode here! Logs ONLY accept strings/ints/bools.
             $this->log("Background Full Sync Completed", [
+                'sync_run' => $runId,
                 'project_id' => $pid,
                 'executed_by' => 'System',
                 'matched' => $matchedCount,
@@ -1063,6 +1272,7 @@ class ROCS extends AbstractExternalModule
                         \REDCap::email($to, $from, $subject, $message);
 
                         $this->log("Adjudication Notification Email Sent", [
+                            'sync_run' => $runId,
                             'project_id' => $pid,
                             'recipients' => $to
                         ]);
@@ -1073,8 +1283,10 @@ class ROCS extends AbstractExternalModule
         } catch (\Throwable $e) {
             $this->setProjectSetting('running', false, $pid);
             $this->log("Background Full Sync Errored", [
+                'sync_run' => $runId,
                 'project_id' => $pid,
                 'error' => $e->getMessage(),
+                'thrown_at' => $e->getFile() . ':' . $e->getLine()
             ]);
         }
     }

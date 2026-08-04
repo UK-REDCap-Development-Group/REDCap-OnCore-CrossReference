@@ -212,6 +212,12 @@
             }
         },
         {
+            "key": "last-cron-run",
+            "name": "DO NOT EDIT! Date (Y-m-d) the scheduled sync last claimed. Kept separate from adj-metadata so a manual sync does not cancel the day's scheduled run.",
+            "type": "text",
+            "hidden": true
+        },
+        {
             "key": "running",
             "name": "Adjudication is running in background and sync page should be flagged as such.",
             "type": "checkbox",

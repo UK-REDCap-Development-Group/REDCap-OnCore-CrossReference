@@ -55,17 +55,6 @@ if($module->getProjectSetting('running')):
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
 
 <div class="d-flex container" style="flex-direction: column;">
-    <div class="row selection-btns">
-        <div class="col-md-9">
-            <a id="sync-btn" class="center-home-sects">
-                <div class="center-home-sects">
-                    <span><i class="fas fa-arrows-rotate"></i></span><br>
-                    <h5>Sync with OnCore</h5>
-                    <div id="records_list"></div>
-                </div>
-            </a>
-        </div>
-    </div>
     <div id="sync_list" class="row" style="flex-direction: column;">
         <div id="msg"></div>
         <label for="filter">Filter</label>
@@ -73,6 +62,9 @@ if($module->getProjectSetting('running')):
             <option value="all">All</option>
             <option value="needs-attention">Need Attention</option>
             <option value="not-in-OnCore">Not in OnCore</option>
+            <!-- OnCore could not be reached, which is not the same as it not
+                 holding the protocol. Row class comes from the status text. -->
+            <option value="oncore-error">OnCore Error</option>
         </select>
         <table class="dataTable cell-border no-footer" id="adjudicate_table">
             <thead>
@@ -152,7 +144,12 @@ if($module->getProjectSetting('running')):
                 }
             });
             
-            rowHTML += `<td>${each.status}</td>`;
+            // The message explains the status - for "oncore error" it carries
+            // the API's own words, which is the only place they surface.
+            const statusTitle = String(each.message ?? '')
+                .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            rowHTML += `<td title="${statusTitle}">${each.status}</td>`;
             row.innerHTML = rowHTML;
             <?php if ($can_adjudicate):?>
                 const actionButtons = each.status.toLowerCase() === 'not in oncore'

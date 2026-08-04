@@ -50,6 +50,31 @@ Field paths are resolved in two places that must stay in step: `classes/OnCoreFi
 
 The proxy also permits direct `contacts` and `sponsors` lookups, plus `protocolTasks` and `contactCredentials`; task lists and credentials are not part of the default mapping set.
 
+## Reading a background sync
+
+Every entry a single `performFullSync` writes is tagged with a `sync_run` identifier of the form `rocs-{pid}-{YmdHis}-{random}`, so one run reads back as a unit rather than as entries interleaved with every other run in the log:
+
+```php
+$module->queryLogs("SELECT timestamp, message, record_id, looked_up, outcome,
+                           fields_compared, fields_differing, error
+                    WHERE sync_run = ?
+                    ORDER BY timestamp", [$runId]);
+```
+
+The run identifier appears on the "Background Full Sync Started" entry. Between that and "Background Full Sync Completed" there is one `ROCS Sync Record` entry per record, whose `outcome` is one of:
+
+| Outcome | Meaning |
+| --- | --- |
+| `matched` | Every mapped field agreed with OnCore |
+| `needs attention` | At least one mapped field differed; `fields_differing` says how many |
+| `not in OnCore` | OnCore answered, but holds no protocol with that number |
+| `oncore error` | The request itself failed; `error` carries the API's message |
+| `skipped` | The record has neither an IRB nor a protocol number |
+
+These entries deliberately record **what happened to a record, not what it contains**. Record IDs, protocol numbers and counts are logged; the REDCap and OnCore values behind a mismatch are not, and stay in the adjudication data where the Sync Dashboard reads them under REDCap's own access control.
+
+Entries carrying a `sync_run` tag are pruned at the start of each run once they pass `ROCS::SYNC_LOG_RETENTION_DAYS` (30). Untagged entries — module initialisation, authorisation changes — are never pruned.
+
 # Pages
 This module contains two custom pages which are necessary for the function/operation of the project.
 ### FieldMappings.php

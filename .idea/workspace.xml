@@ -6,12 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="f740906d-bd68-4891-9807-9142297f32e9" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ROCS.php" beforeDir="false" afterPath="$PROJECT_DIR$/ROCS.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/css/field_mappings.css" beforeDir="false" afterPath="$PROJECT_DIR$/css/field_mappings.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/oncore_proxy.php" beforeDir="false" afterPath="$PROJECT_DIR$/oncore_proxy.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pages/FieldMappings.php" beforeDir="false" afterPath="$PROJECT_DIR$/pages/FieldMappings.php" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/readme.md" beforeDir="false" afterPath="$PROJECT_DIR$/readme.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/scripts.php" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/scripts.php" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pages/SyncDashboard.php" beforeDir="false" afterPath="$PROJECT_DIR$/pages/SyncDashboard.php" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -103,7 +98,7 @@
       <workItem from="1782314715643" duration="15618000" />
       <workItem from="1783429560180" duration="20129000" />
       <workItem from="1784041748366" duration="27165000" />
-      <workItem from="1785764820701" duration="3498000" />
+      <workItem from="1785764820701" duration="4337000" />
     </task>
     <servers />
   </component>
