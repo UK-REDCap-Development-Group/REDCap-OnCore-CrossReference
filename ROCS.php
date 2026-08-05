@@ -613,6 +613,12 @@ class ROCS extends AbstractExternalModule
      *
      * Nothing is logged on an ordinary not-yet-due tick. At one tick a minute,
      * per project, anything logged here would bury the log it is written to.
+     *
+     * "cron-testing-mode" sets the once-a-day limit and the configured weekday
+     * aside so a run can be triggered repeatedly while testing. It is not a way
+     * to run more often on a schedule: each configured time still runs once, and
+     * another run means setting another time. See the branch below for why it
+     * cannot be "run whenever the clock is past the target".
      */
     public function rocsCronFullSync()
     {
@@ -624,14 +630,19 @@ class ROCS extends AbstractExternalModule
                 continue;
             }
 
+            $testing = (bool) $this->getProjectSetting('cron-testing-mode', $pid);
+
             // Checked first: on all but one of the day's ticks this is why we
-            // stop.
-            if ($this->getProjectSetting('last-cron-run', $pid) === $today) {
+            // stop. Testing mode is the one way past it.
+            if (!$testing && $this->getProjectSetting('last-cron-run', $pid) === $today) {
                 continue;
             }
 
             $frequency = $this->getProjectSetting('cron-frequency', $pid) ?: 'weekly';
-            if ($frequency !== 'daily') {
+
+            // Testing runs off the clock alone, so the configured weekday would
+            // only get in the way of trying a Saturday schedule on a Tuesday.
+            if (!$testing && $frequency !== 'daily') {
                 $day = $this->getProjectSetting('cron-day', $pid) ?: 'Saturday';
                 if ($now->format('l') !== $day) {
                     continue;
@@ -643,15 +654,29 @@ class ROCS extends AbstractExternalModule
                 continue;
             }
 
-            // Claim the day before starting, not after.
-            $this->setProjectSetting('last-cron-run', $today, $pid);
+            if ($testing) {
+                // The cron ticks every minute, so "past the target" on its own
+                // would start a sync a minute for the rest of the day. Keying on
+                // the target itself gives one run per configured time: set a new
+                // time to get another run, and setting one already past today
+                // runs at the next tick.
+                $targetKey = $target->format('Y-m-d H:i');
+                if ($this->getProjectSetting('last-cron-test-target', $pid) === $targetKey) {
+                    continue;
+                }
+
+                $this->setProjectSetting('last-cron-test-target', $targetKey, $pid);
+            } else {
+                // Claim the day before starting, not after.
+                $this->setProjectSetting('last-cron-run', $today, $pid);
+            }
 
             $this->log("ROCS Scheduled Sync Starting", [
                 'project_id' => $pid,
                 'frequency' => $frequency,
                 'scheduled_for' => $target->format('Y-m-d H:i T'),
                 'started_at' => $now->format('Y-m-d H:i T'),
-                'triggered_by' => 'cron'
+                'triggered_by' => $testing ? 'cron (testing mode)' : 'cron'
             ]);
 
             $this->performFullSync($pid);
@@ -877,8 +902,14 @@ class ROCS extends AbstractExternalModule
         return $mapper($data);
     }
 
-    /** How long a sync's per-record log entries are kept. */
+    /** How long a sync's log entries are kept. */
     const SYNC_LOG_RETENTION_DAYS = 30;
+
+    /**
+     * Ceiling for the JSON report, under the 65,535 bytes a MySQL TEXT column
+     * holds, with room for the rest of the entry.
+     */
+    const SYNC_LOG_MAX_BYTES = 60000;
 
     private function isOncoreRecordList(array $data)
     {
@@ -921,19 +952,64 @@ class ROCS extends AbstractExternalModule
     }
 
     /**
-     * One entry per record, recording what happened to it and nothing about
-     * what it holds. Record IDs and protocol numbers identify the work; the
-     * clinical values behind a mismatch stay out of the log deliberately.
+     * What happened to each record this run, collected in memory and written as
+     * one entry at the end rather than a row per record. Reset at the start of
+     * every performFullSync.
      */
-    private function logSyncRecord($runId, $pid, $recordId, $lookedUp, $outcome, array $detail = [])
+    private $syncRecords = [];
+
+    /**
+     * Note what happened to a record: what it holds is deliberately absent, so
+     * record IDs, protocol numbers and counts only. The clinical values behind a
+     * mismatch stay in the adjudication data.
+     */
+    private function recordSyncOutcome($recordId, $lookedUp, $outcome, array $detail = [])
     {
-        $this->log("ROCS Sync Record", array_merge([
-            'sync_run' => $runId,
-            'project_id' => $pid,
+        $this->syncRecords[] = array_merge([
             'record_id' => (string) $recordId,
             'looked_up' => (string) $lookedUp,
             'outcome' => $outcome
-        ], $detail));
+        ], $detail);
+    }
+
+    /**
+     * Write the run as a single entry. The record list is JSON in one parameter,
+     * because a log parameter holds a string and the point of this shape is one
+     * row per run rather than one per record.
+     *
+     * That parameter is a MySQL TEXT column, so a large project could otherwise
+     * push the JSON past 64KB and have it truncated - or rejected - without
+     * saying so. Anything close to the limit sheds its matched records first
+     * (the bulk, and the least interesting), then truncates outright, and either
+     * way says in the entry what it dropped.
+     */
+    private function logSyncReport($runId, $pid, array $summary)
+    {
+        $payload = ['summary' => $summary, 'records' => $this->syncRecords];
+        $encoded = json_encode($payload);
+
+        if (strlen($encoded) > self::SYNC_LOG_MAX_BYTES) {
+            $interesting = array_values(array_filter($this->syncRecords, function ($record) {
+                return ($record['outcome'] ?? '') !== 'matched';
+            }));
+
+            $payload['records'] = $interesting;
+            $payload['matched_records_omitted'] = count($this->syncRecords) - count($interesting);
+            $encoded = json_encode($payload);
+        }
+
+        while (strlen($encoded) > self::SYNC_LOG_MAX_BYTES && !empty($payload['records'])) {
+            array_pop($payload['records']);
+            $payload['records_truncated'] = true;
+            $encoded = json_encode($payload);
+        }
+
+        $this->log("ROCS Sync Report", [
+            'sync_run' => $runId,
+            'project_id' => $pid,
+            'records_logged' => count($payload['records']),
+            'report' => $encoded
+        ]);
     }
 
     /**
@@ -959,15 +1035,12 @@ class ROCS extends AbstractExternalModule
     public function performFullSync($pid)
     {
         $runId = $this->syncRunId($pid);
+        $this->syncRecords = [];
+        $startedAt = date('Y-m-d H:i:s');
 
         try {
             $this->pruneSyncLogs();
             $this->setProjectSetting('running', true, $pid);
-            $this->log("Background Full Sync Started", [
-                'sync_run' => $runId,
-                'project_id' => $pid,
-                'executed_by' => 'System'
-            ]);
 
             $irb_field = $this->getProjectSetting('irb-field', $pid) ?: 'eirb_number';
             $protocol_field = $this->getProjectSetting('protocol-field', $pid) ?: 'rocs_protocol_number';
@@ -1019,7 +1092,7 @@ class ROCS extends AbstractExternalModule
                 // than dropped silently so a run's entries account for every
                 // record it counted as checked.
                 if (!$eirb && !$protocol_number) {
-                    $this->logSyncRecord($runId, $pid, $record_id, '', 'skipped', [
+                    $this->recordSyncOutcome($record_id, '', 'skipped', [
                         'reason' => 'No IRB or protocol number on the record'
                     ]);
                     continue;
@@ -1038,7 +1111,7 @@ class ROCS extends AbstractExternalModule
                 // An unreachable or unauthorised API is not the same thing as a
                 // protocol OnCore does not hold, and must not read as one.
                 if (!$details['success']) {
-                    $this->logSyncRecord($runId, $pid, $record_id, $protocol_number ?: $eirb, 'oncore error', [
+                    $this->recordSyncOutcome($record_id, $protocol_number ?: $eirb, 'oncore error', [
                         'error' => $details['message'] ?? 'Unknown error'
                     ]);
 
@@ -1052,6 +1125,10 @@ class ROCS extends AbstractExternalModule
                     ];
                     continue;
                 }
+
+                // Anything else worth noting about this record, carried onto its
+                // entry in the report rather than logged on its own.
+                $recordNotes = [];
 
                 if (isset($protocolDetails['protocolId'])) {
                     $protocolId = $protocolDetails['protocolId'];
@@ -1068,17 +1145,13 @@ class ROCS extends AbstractExternalModule
                         $response = \REDCap::saveData($pid, 'json', json_encode($saveData));
                         if (empty($response['errors'])) {
                             $protocol_number = $fetchedProtocolNo;
+                            $recordNotes['protocol_number_saved'] = $fetchedProtocolNo;
                         } else {
-                            $this->log("Error auto-saving protocol number", [
-                                'sync_run' => $runId,
-                                'project_id' => $pid,
-                                'record_id' => (string) $record_id,
-                                'errors' => json_encode($response['errors'])
-                            ]);
+                            $recordNotes['protocol_save_errors'] = $response['errors'];
                         }
                     }
                 } else {
-                    $this->logSyncRecord($runId, $pid, $record_id, $protocol_number ?: $eirb, 'not in OnCore');
+                    $this->recordSyncOutcome($record_id, $protocol_number ?: $eirb, 'not in OnCore');
 
                     $toSave[] = [
                         'record_id' => (string) $record_id,
@@ -1112,6 +1185,7 @@ class ROCS extends AbstractExternalModule
 
                 $oncoreDataByEndpoint = [];
                 $results = [];
+                $endpointErrors = [];
                 foreach ($endpoints as $protocol) {
                     $apiPath = in_array($protocol, $pathEndpoints, true)
                         ? $protocol . '/' . rawurlencode((string) $protocolId)
@@ -1119,14 +1193,10 @@ class ROCS extends AbstractExternalModule
 
                     $res = $this->fetchOncoreData($apiPath, $pid);
 
+                    // Carried on the record's own entry rather than logged
+                    // separately, so one record stays one line of the report.
                     if (!($res['success'] ?? false)) {
-                        $this->log("OnCore Endpoint Failed", [
-                            'sync_run' => $runId,
-                            'project_id' => $pid,
-                            'record_id' => (string) $record_id,
-                            'endpoint' => $protocol,
-                            'error' => $res['message'] ?? 'Unknown error'
-                        ]);
+                        $endpointErrors[$protocol] = $res['message'] ?? 'Unknown error';
                     }
 
                     $oncoreDataByEndpoint[$protocol] = $res['data'] ?? [];
@@ -1194,17 +1264,21 @@ class ROCS extends AbstractExternalModule
 
                 // Counts only - which fields differed is in the adjudication
                 // data, where the values belong.
-                $recordDetail = [
+                $recordDetail = array_merge([
                     'protocol_id' => (string) $protocolId,
                     'fields_compared' => $totalMappedFields,
                     'fields_differing' => $totalMappedFields - $matchedFields
-                ];
+                ], $recordNotes);
+
+                if (!empty($endpointErrors)) {
+                    $recordDetail['endpoint_errors'] = $endpointErrors;
+                }
 
                 if ($totalMappedFields > 0 && $matchedFields == $totalMappedFields) {
                     $matchedCount++;
-                    $this->logSyncRecord($runId, $pid, $record_id, $protocol_number ?: $eirb, 'matched', $recordDetail);
+                    $this->recordSyncOutcome($record_id, $protocol_number ?: $eirb, 'matched', $recordDetail);
                 } else {
-                    $this->logSyncRecord($runId, $pid, $record_id, $protocol_number ?: $eirb, 'needs attention', $recordDetail);
+                    $this->recordSyncOutcome($record_id, $protocol_number ?: $eirb, 'needs attention', $recordDetail);
 
                     $toSave[] = [
                         'record_id' => (string) $record_id,
@@ -1235,15 +1309,16 @@ class ROCS extends AbstractExternalModule
 
             $adjudicated_count = count($toSave);
 
-            // Keep json_encode here! Logs ONLY accept strings/ints/bools.
-            $this->log("Background Full Sync Completed", [
-                'sync_run' => $runId,
-                'project_id' => $pid,
+            // One entry for the whole run: counts, plus what happened to each
+            // record, as a single JSON object.
+            $this->logSyncReport($runId, $pid, [
+                'outcome' => 'completed',
                 'executed_by' => 'System',
-                'matched' => $matchedCount,
+                'started_at' => $startedAt,
+                'finished_at' => date('Y-m-d H:i:s'),
                 'checked' => $checkedCount,
-                'adjudicated_records' => $adjudicated_count,
-                'metadata' => json_encode($metadata)
+                'matched' => $matchedCount,
+                'adjudicated_records' => $adjudicated_count
             ]);
 
             // Emailing Feature
@@ -1282,9 +1357,15 @@ class ROCS extends AbstractExternalModule
 
         } catch (\Throwable $e) {
             $this->setProjectSetting('running', false, $pid);
-            $this->log("Background Full Sync Errored", [
-                'sync_run' => $runId,
-                'project_id' => $pid,
+
+            // Still write the report. A run that died part way through is
+            // exactly when knowing which records it reached is worth having.
+            $this->logSyncReport($runId, $pid, [
+                'outcome' => 'errored',
+                'executed_by' => 'System',
+                'started_at' => $startedAt,
+                'finished_at' => date('Y-m-d H:i:s'),
+                'records_reached' => count($this->syncRecords),
                 'error' => $e->getMessage(),
                 'thrown_at' => $e->getFile() . ':' . $e->getLine()
             ]);

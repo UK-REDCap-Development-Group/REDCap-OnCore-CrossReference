@@ -212,8 +212,23 @@
             }
         },
         {
+            "key": "cron-testing-mode",
+            "name": "<b>Testing only.</b> Ignore the once-per-day limit and the day of the week above, and run from the time alone. Each time you set runs once: change the time to run again, including to a time already past today, which runs at the next cron tick (within a minute). <b>Uncheck this when you have finished testing.</b>",
+            "type": "checkbox",
+            "branchingLogic": {
+                "field": "enable-cron",
+                "value": true
+            }
+        },
+        {
             "key": "last-cron-run",
             "name": "DO NOT EDIT! Date (Y-m-d) the scheduled sync last claimed. Kept separate from adj-metadata so a manual sync does not cancel the day's scheduled run.",
+            "type": "text",
+            "hidden": true
+        },
+        {
+            "key": "last-cron-test-target",
+            "name": "DO NOT EDIT! The scheduled time (Y-m-d H:i) most recently run while testing mode was on, so one configured time runs once.",
             "type": "text",
             "hidden": true
         },

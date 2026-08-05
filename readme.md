@@ -50,18 +50,33 @@ Field paths are resolved in two places that must stay in step: `classes/OnCoreFi
 
 The proxy also permits direct `contacts` and `sponsors` lookups, plus `protocolTasks` and `contactCredentials`; task lists and credentials are not part of the default mapping set.
 
+## Scheduling the background sync
+
+With **Enable Automated Background Synchronization** ticked, the module's cron ticks about once a minute and runs a full sync on the first tick at or after the configured time, once per day (or once on the configured weekday). A tick landing after the target still runs, so a stalled system cron makes a sync late rather than skipping it. The claim is recorded in `last-cron-run`, separately from `adj-metadata`, so syncing by hand does not cancel the day's scheduled run.
+
+Because the limit is one run per calendar **day**, changing the time after a run has happened does not produce a second run that day — the new time takes effect tomorrow.
+
+### Testing mode
+
+**Testing only** lifts the once-per-day limit and the configured weekday, running from the time alone. Each configured time still runs once: to run again, change the time. Setting a time that has already passed today runs at the next tick, within about a minute, which is the quickest way to trigger a run on demand.
+
+It is one run per configured time rather than a literal "run whenever the clock is past the target" because the cron ticks every minute — the literal reading would start a full sync every minute until midnight, hammering the OnCore API. The time most recently run this way is held in `last-cron-test-target`; `last-cron-run` is left untouched, so unticking the box resumes the normal schedule exactly where it was.
+
 ## Reading a background sync
 
-Every entry a single `performFullSync` writes is tagged with a `sync_run` identifier of the form `rocs-{pid}-{YmdHis}-{random}`, so one run reads back as a unit rather than as entries interleaved with every other run in the log:
+A `performFullSync` writes **one** log entry, `ROCS Sync Report`, tagged with a `sync_run` identifier of the form `rocs-{pid}-{YmdHis}-{random}`. Per-record detail is collected in memory during the run and written inside that entry as a single JSON object in the `report` parameter, rather than as a row per record:
 
 ```php
-$module->queryLogs("SELECT timestamp, message, record_id, looked_up, outcome,
-                           fields_compared, fields_differing, error
-                    WHERE sync_run = ?
-                    ORDER BY timestamp", [$runId]);
+$entry = $module->queryLogs("SELECT sync_run, records_logged, report
+                             WHERE message = 'ROCS Sync Report'
+                             ORDER BY timestamp DESC LIMIT 1")->fetch_assoc();
+
+$report = json_decode($entry['report'], true);
+$report['summary'];   // outcome, timings, checked / matched / adjudicated counts
+$report['records'];   // one element per record
 ```
 
-The run identifier appears on the "Background Full Sync Started" entry. Between that and "Background Full Sync Completed" there is one `ROCS Sync Record` entry per record, whose `outcome` is one of:
+Each element of `records` carries `record_id`, `looked_up`, and an `outcome`:
 
 | Outcome | Meaning |
 | --- | --- |
@@ -71,7 +86,13 @@ The run identifier appears on the "Background Full Sync Started" entry. Between 
 | `oncore error` | The request itself failed; `error` carries the API's message |
 | `skipped` | The record has neither an IRB nor a protocol number |
 
-These entries deliberately record **what happened to a record, not what it contains**. Record IDs, protocol numbers and counts are logged; the REDCap and OnCore values behind a mismatch are not, and stay in the adjudication data where the Sync Dashboard reads them under REDCap's own access control.
+Anything else worth noting about a record rides on its element rather than becoming its own entry: `endpoint_errors` when an individual endpoint failed, `protocol_number_saved` or `protocol_save_errors` when the protocol number was written back to REDCap.
+
+A run that throws still writes its report, with `summary.outcome` of `errored` plus the error and where it was thrown — a run that died part way through is exactly when knowing which records it reached is worth having.
+
+The report records **what happened to a record, not what it contains**. Record IDs, protocol numbers and counts are logged; the REDCap and OnCore values behind a mismatch are not, and stay in the adjudication data where the Sync Dashboard reads them under REDCap's own access control.
+
+`report` is stored in a MySQL TEXT column, so it is capped at `ROCS::SYNC_LOG_MAX_BYTES` (60,000) to avoid silent truncation. A run too large to fit drops its `matched` records first — the bulk, and the least interesting — and sets `matched_records_omitted`; if it still does not fit, it drops records from the end and sets `records_truncated`. The summary counts are always accurate regardless of what the list dropped.
 
 Entries carrying a `sync_run` tag are pruned at the start of each run once they pass `ROCS::SYNC_LOG_RETENTION_DAYS` (30). Untagged entries — module initialisation, authorisation changes — are never pruned.
 
