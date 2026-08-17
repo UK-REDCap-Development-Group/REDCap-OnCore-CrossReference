@@ -379,6 +379,16 @@ class ROCS extends AbstractExternalModule
 
         $is_authorized = (SUPER_USER || in_array(USERID, $authorized_users));
 
+        // REDCap serves its resources from a version-stamped directory that
+        // changes on every upgrade, so the path has to be asked for rather than
+        // written down. APP_PATH_IMAGES is REDCap's own answer; the fallback
+        // builds it the way REDCap does, in case the constant is ever absent.
+        $image_path = defined('APP_PATH_IMAGES')
+            ? APP_PATH_IMAGES
+            : rtrim(APP_PATH_WEBROOT, '/') . '/Resources/images/';
+        $collapse_icon = $image_path . 'toggle-collapse.png';
+        $expand_icon = $image_path . 'toggle-expand.png';
+
         if ($is_authorized):
             ?>
             <script type="text/javascript">
@@ -394,7 +404,7 @@ class ROCS extends AbstractExternalModule
                         <div class="x-panel-body">
                             <div class="opacity65 projMenuToggle">
                                 <a href="javascript:;">
-                                    <img src="/redcap/redcap_v16.1.7/Resources/images/toggle-collapse.png" aria-hidden="true">
+                                    <img src="<?php echo htmlspecialchars($collapse_icon, ENT_QUOTES); ?>" aria-hidden="true">
                                 </a>
                             </div>
                         </div>
@@ -425,10 +435,10 @@ class ROCS extends AbstractExternalModule
                             var $bwrap = $(this).closest('.x-panel-header').next('.x-panel-bwrap');
                             if ($bwrap.is(':visible')) {
                                 $bwrap.slideUp();
-                                $(this).find('img').attr('src', '/redcap/redcap_v16.1.7/Resources/images/toggle-expand.png');
+                                $(this).find('img').attr('src', <?= json_encode($expand_icon) ?>);
                             } else {
                                 $bwrap.slideDown();
-                                $(this).find('img').attr('src', '/redcap/redcap_v16.1.7/Resources/images/toggle-collapse.png');
+                                $(this).find('img').attr('src', <?= json_encode($collapse_icon) ?>);
                             }
                         });
                     }
