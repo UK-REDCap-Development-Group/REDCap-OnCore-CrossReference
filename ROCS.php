@@ -14,113 +14,248 @@ require_once __DIR__ . '/classes/OnCoreFieldPath.php';
 
 class ROCS extends AbstractExternalModule
 {
-    // TODO: implement the addition of a module role (or roles?) which can be checked to allow users to see and edit mappings and sync pages
-    public function preconfigure($project_id)
+    /** The form ROCS adds to a project to hold its own bookkeeping fields. */
+    const HELPER_FORM = 'rocs_helper_form';
+
+    /**
+     * The module's own fields. The sync filters on rocs_sync and writes protocol
+     * numbers back to rocs_protocol_number, so a project without them does not
+     * sync at all. That is why these are restored on every run while everything
+     * else preconfigure() writes is only ever a starting point.
+     */
+    private function helperFormFields()
     {
-        // url check
-        $host = $_SERVER['HTTP_HOST'] ?? '';
-        if (preg_match("/\.uky\.edu/", $host)) {
-            $this->setProjectSetting('oncore-token-url', 'https://uky-oncore-prod.forteresearchapps.com/forte-platform-web/api/oauth/token', $project_id);
-            $this->setProjectSetting('oncore-api-url', 'https://uky-oncore-prod.forteresearchapps.com/oncore-api/rest/', $project_id);
+        $blank = [
+            'section_header' => '',
+            'select_choices_or_calculations' => '',
+            'field_note' => '',
+            'text_validation_type_or_show_slider_number' => '',
+            'text_validation_min' => '',
+            'text_validation_max' => '',
+            'identifier' => '',
+            'branching_logic' => '',
+            'required_field' => '',
+            'custom_alignment' => '',
+            'question_number' => '',
+            'matrix_group_name' => '',
+            'matrix_ranking' => '',
+            'field_annotation' => ''
+        ];
+
+        return [
+            'rocs_sync_desc' => array_merge($blank, [
+                'field_name' => 'rocs_sync_desc',
+                'form_name' => self::HELPER_FORM,
+                'field_type' => 'descriptive',
+                'field_label' => 'This form is used to track records which have been ignored from future OnCore synchronization, as well as store protocol numbers if they are not already provided in your project.'
+            ]),
+            'rocs_sync' => array_merge($blank, [
+                'field_name' => 'rocs_sync',
+                'form_name' => self::HELPER_FORM,
+                'field_type' => 'checkbox',
+                'field_label' => 'Synchronize with OnCore through external module?',
+                'select_choices_or_calculations' => '1, Opt-Out of Synchronization'
+            ]),
+            'rocs_protocol_number' => array_merge($blank, [
+                'field_name' => 'rocs_protocol_number',
+                'form_name' => self::HELPER_FORM,
+                'field_type' => 'text',
+                'field_label' => 'Protocol Number'
+            ])
+        ];
+    }
+
+    /**
+     * Put back any of the module's own fields that have gone missing, keeping
+     * the helper form one contiguous block: REDCap rejects a dictionary whose
+     * forms are interleaved, so a single deleted field cannot simply be appended
+     * to the end while the rest of its form is still in place.
+     *
+     * Returns the dictionary to save. $restored is filled with the names that
+     * were added, and is empty when there was nothing to do.
+     */
+    private function restoreHelperFormFields(array $data_dict, array &$restored)
+    {
+        $required = $this->helperFormFields();
+        $missing = array_diff_key($required, $data_dict);
+        $restored = array_keys($missing);
+
+        if (empty($missing)) {
+            return $data_dict;
         }
 
-        // update data dictionary with helper form
+        // Where the form still has fields, the restored ones follow the last of
+        // them; where it has none, they start the form at the end.
+        $anchor = null;
+        foreach ($data_dict as $field_name => $attributes) {
+            if (($attributes['form_name'] ?? '') === self::HELPER_FORM) {
+                $anchor = $field_name;
+            }
+        }
+
+        if ($anchor === null) {
+            return array_merge($data_dict, $missing);
+        }
+
+        $rebuilt = [];
+        foreach ($data_dict as $field_name => $attributes) {
+            $rebuilt[$field_name] = $attributes;
+            if ($field_name === $anchor) {
+                foreach ($missing as $name => $definition) {
+                    $rebuilt[$name] = $definition;
+                }
+            }
+        }
+
+        return $rebuilt;
+    }
+
+    /**
+     * Write a default only into a setting that has nothing usable in it.
+     *
+     * preconfigure() runs on every configuration save, so a setting written
+     * unconditionally is one the admin cannot change: their edit would be undone
+     * by the same save that made it. Seeding leaves any existing value alone.
+     */
+    private function seedProjectSetting($key, $value, $project_id)
+    {
+        $current = $this->getProjectSetting($key, $project_id);
+
+        if (is_array($current)) {
+            $current = array_filter($current, static function ($entry) {
+                return $entry !== null && trim((string) $entry) !== '';
+            });
+            $is_empty = empty($current);
+        } else {
+            $is_empty = ($current === null || trim((string) $current) === '');
+        }
+
+        if (!$is_empty) {
+            return false;
+        }
+
+        $this->setProjectSetting($key, $value, $project_id);
+        return true;
+    }
+
+    /**
+     * Keep a setting that names a REDCap field pointing at a field that exists.
+     *
+     * An admin's choice is honoured for as long as it resolves. A setting naming
+     * a field that has since been deleted is the one case worth overruling: it
+     * reads as empty on every record, so the sync silently compares nothing and
+     * reports every protocol as missing from OnCore.
+     */
+    private function repairFieldSetting($key, $default, array $data_dict, $project_id)
+    {
+        $current = $this->getProjectSetting($key, $project_id);
+        if (is_array($current)) {
+            $current = reset($current);
+        }
+        $current = trim((string) $current);
+
+        if ($current !== '' && isset($data_dict[$current])) {
+            return;
+        }
+
+        if (!isset($data_dict[$default])) {
+            // Nothing to fall back to. Said once, with the field named, rather
+            // than left to surface as an empty sync.
+            if ($current !== '') {
+                $this->log("ROCS Field Setting Unresolved", [
+                    'project_id' => $project_id,
+                    'setting' => $key,
+                    'configured' => $current,
+                    'details' => "The configured field no longer exists in this project and the default '$default' is not present either. Choose a field in the module configuration.",
+                    'executed_by' => 'system'
+                ], $project_id, 'System');
+            }
+            return;
+        }
+
+        $this->setProjectSetting($key, $default, $project_id);
+
+        if ($current !== '') {
+            $this->log("ROCS Field Setting Repaired", [
+                'project_id' => $project_id,
+                'setting' => $key,
+                'configured' => $current,
+                'details' => "The configured field no longer exists in this project; reset to '$default'.",
+                'executed_by' => 'system'
+            ], $project_id, 'System');
+        }
+    }
+
+    // TODO: implement the addition of a module role (or roles?) which can be checked to allow users to see and edit mappings and sync pages
+
+    /**
+     * Fill in what a project needs to work and nothing else.
+     *
+     * This runs on every configuration save, not only on enable, so most of what
+     * it writes is seeded rather than set: an admin who points the module at a
+     * different OnCore instance, or picks their own IRB field, meant it, and a
+     * hook that argued with them would make those settings unchangeable.
+     *
+     * Three things are restored regardless, because without them the module does
+     * not work at all rather than working differently: the helper form's fields,
+     * a field setting naming a field that has been deleted, and an empty
+     * authorised-user list.
+     */
+    public function preconfigure($project_id)
+    {
+        // A blank URL leaves the module unable to reach OnCore, so it is worth a
+        // default. A URL the admin has changed is not ours to overwrite.
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        if (preg_match("/\.uky\.edu/", $host)) {
+            $this->seedProjectSetting('oncore-token-url', 'https://uky-oncore-prod.forteresearchapps.com/forte-platform-web/api/oauth/token', $project_id);
+            $this->seedProjectSetting('oncore-api-url', 'https://uky-oncore-prod.forteresearchapps.com/oncore-api/rest/', $project_id);
+        }
+
         $data_dict = \REDCap::getDataDictionary($project_id, 'array');
         $current_forms = array_unique(array_column($data_dict, 'form_name'));
-        $target_form = 'rocs_helper_form';
 
-        if (!in_array($target_form, $current_forms)) {
-            $new_fields = [
-                'rocs_sync_desc' => [
-                    'field_name' => 'rocs_sync_desc',
-                    'form_name' => $target_form,
-                    'section_header' => '',
-                    'field_type' => 'descriptive',
-                    'field_label' => 'This form is used to track records which have been ignored from future OnCore synchronization, as well as store protocol numbers if they are not already provided in your project.',
-                    'select_choices_or_calculations' => '',
-                    'field_note' => '',
-                    'text_validation_type_or_show_slider_number' => '',
-                    'text_validation_min' => '',
-                    'text_validation_max' => '',
-                    'identifier' => '',
-                    'branching_logic' => '',
-                    'required_field' => '',
-                    'custom_alignment' => '',
-                    'question_number' => '',
-                    'matrix_group_name' => '',
-                    'matrix_ranking' => '',
-                    'field_annotation' => ''
-                ],
-                'rocs_sync' => [
-                    'field_name' => 'rocs_sync',
-                    'form_name' => $target_form,
-                    'section_header' => '',
-                    'field_type' => 'checkbox',
-                    'field_label' => 'Synchronize with OnCore through external module?',
-                    'select_choices_or_calculations' => '1, Opt-Out of Synchronization',
-                    'field_note' => '',
-                    'text_validation_type_or_show_slider_number' => '',
-                    'text_validation_min' => '',
-                    'text_validation_max' => '',
-                    'identifier' => '',
-                    'branching_logic' => '',
-                    'required_field' => '',
-                    'custom_alignment' => '',
-                    'question_number' => '',
-                    'matrix_group_name' => '',
-                    'matrix_ranking' => '',
-                    'field_annotation' => ''
-                ],
-                'rocs_protocol_number' => [
-                    'field_name' => 'rocs_protocol_number',
-                    'form_name' => $target_form,
-                    'section_header' => '',
-                    'field_type' => 'text',
-                    'field_label' => 'Protocol Number',
-                    'select_choices_or_calculations' => '',
-                    'field_note' => '',
-                    'text_validation_type_or_show_slider_number' => '',
-                    'text_validation_min' => '',
-                    'text_validation_max' => '',
-                    'identifier' => '',
-                    'branching_logic' => '',
-                    'required_field' => '',
-                    'custom_alignment' => '',
-                    'question_number' => '',
-                    'matrix_group_name' => '',
-                    'matrix_ranking' => '',
-                    'field_annotation' => ''
-                ]
-            ];
+        // Distinguishes "this project has never had ROCS on it" from "somebody
+        // deleted a field", which decides whether the optional defaults below
+        // are offered again.
+        $first_run = !in_array(self::HELPER_FORM, $current_forms, true);
 
-            // Append new fields
-            foreach ($new_fields as $field_name => $field_attributes) {
-                $data_dict[$field_name] = $field_attributes;
-            }
+        $restored = [];
+        $repaired_dict = $this->restoreHelperFormFields($data_dict, $restored);
 
+        if (!empty($restored)) {
             try {
-                \REDCapHelper::saveDataDictionary($project_id, $data_dict);
+                \REDCapHelper::saveDataDictionary($project_id, $repaired_dict);
+                $data_dict = $repaired_dict;
 
-                if (in_array('demographics', $current_forms) && in_array('regulatory', $current_forms)) {
-                    $this->setProjectSetting('sync-page', ['demographics', 'regulatory'], $project_id);
-                }
-                if (isset($data_dict['eirb_number'])) {
-                    $this->setProjectSetting('irb-field', 'eirb_number', $project_id);
-                }
-                if (isset($data_dict['rocs_protocol_number'])) {
-                    $this->setProjectSetting('protocol-field', 'rocs_protocol_number', $project_id);
-                }
-                if (isset($data_dict['full_title'])) {
-                    $this->setProjectSetting('title-field', 'full_title', $project_id);
-                    $dashboard_fields = $this->getProjectSetting('dashboard-fields', $project_id);
-                    if (empty($dashboard_fields) || !is_array($dashboard_fields)) {
-                        $this->setProjectSetting('dashboard-fields', ['full_title'], $project_id);
-                    }
-                }
-
-                $this->log("Module Initialized Successfully", ['project_id' => $project_id, 'executed_by' => 'system'], $project_id, 'System');
+                $this->log($first_run ? "Module Initialized Successfully" : "ROCS Helper Fields Restored", [
+                    'project_id' => $project_id,
+                    'fields' => implode(', ', $restored),
+                    'executed_by' => 'system'
+                ], $project_id, 'System');
             } catch (\Exception $e) {
-                $this->log("Module Initialization Failed", ['details' => $e->getMessage(), 'executed_by' => 'system'], $project_id, 'System');
+                $this->log($first_run ? "Module Initialization Failed" : "ROCS Helper Field Restore Failed", [
+                    'project_id' => $project_id,
+                    'fields' => implode(', ', $restored),
+                    'details' => $e->getMessage(),
+                    'executed_by' => 'system'
+                ], $project_id, 'System');
+            }
+        }
+
+        // The two settings the sync reads to find a protocol.
+        $this->repairFieldSetting('protocol-field', 'rocs_protocol_number', $data_dict, $project_id);
+        $this->repairFieldSetting('irb-field', 'eirb_number', $data_dict, $project_id);
+
+        // Display-only conveniences, offered once when the module first lands on
+        // a project and never again. An admin who clears a dashboard column or a
+        // sync page wants it cleared, and both fall back safely when unset.
+        if ($first_run) {
+            if (in_array('demographics', $current_forms, true) && in_array('regulatory', $current_forms, true)) {
+                $this->seedProjectSetting('sync-page', ['demographics', 'regulatory'], $project_id);
+            }
+            if (isset($data_dict['full_title'])) {
+                $this->seedProjectSetting('title-field', 'full_title', $project_id);
+                $this->seedProjectSetting('dashboard-fields', ['full_title'], $project_id);
             }
         }
 
