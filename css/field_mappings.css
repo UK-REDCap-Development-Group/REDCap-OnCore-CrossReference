@@ -328,6 +328,35 @@ table.dataTable tbody tr.highlight td {
     100% { transform: rotate(360deg); }
 }
 
+/* Full-page buffer wheel. An OnCore lookup fans out into a dozen API calls, so
+   on a slow link the page sits there looking idle - long enough that people
+   press Adjudicate a second time and start the whole run over. This covers the
+   page until the work finishes, reusing the .loader wheel from above. */
+.rocs-busy-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.75);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 18px;
+    /* Over REDCap's own jQuery UI dialogs, which sit in the low thousands. */
+    z-index: 20000;
+    cursor: progress;
+}
+
+.rocs-busy-message {
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+    text-align: center;
+    max-width: 80%;
+}
+
 .hyperlink {
     text-decoration: underline !important;
     color: #0000EE !important;

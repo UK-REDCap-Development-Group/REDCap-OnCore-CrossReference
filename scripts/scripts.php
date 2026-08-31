@@ -688,6 +688,8 @@ $can_adjudicate = $module->canAdjudicate();
                 return;
             }
 
+            showBusy('Saving your selections to REDCap...');
+
             $.ajax({
                 url: "<?= $module->getUrl('scripts/save_record.php'); ?>",
                 method: "POST",
@@ -697,7 +699,20 @@ $can_adjudicate = $module->canAdjudicate();
                     record: jsonPayload // REDCap expects array
                 },
                 success: async function (result) {
+                    hideBusy();
                     console.log("Checkpoint saved:", result);
+
+                    // The endpoint answers 2xx only for a save REDCap actually
+                    // took. This guard is for the older endpoint still being
+                    // in place, which said "saved" no matter what happened.
+                    if (!result || result.success !== true) {
+                        alert(`REDCap did not save this record.
+
+${result && result.error ? result.error : 'The server did not report why.'}
+
+Your selections are still on screen.`);
+                        return;
+                    }
 
                     try {
                         await logModuleEvent("Data saved to REDCap Database", {
@@ -710,9 +725,44 @@ $can_adjudicate = $module->canAdjudicate();
                     }
 
                     closeModal();
-                    window.location.reload();
+
+                    // The record has been adjudicated, so take it off the
+                    // dashboard's outstanding list. This is the same "ignore
+                    // this time" the table offers - the record stays eligible
+                    // for the next sync rather than opting out of them.
+                    // tempIgnore only exists on the dashboard; a record page
+                    // has no table to update, so it falls back to a reload.
+                    if (typeof tempIgnore === 'function') {
+                        showBusy('Updating the sync list...');
+                        try {
+                            await tempIgnore(record.record_id);
+                        } catch (err) {
+                            console.error('Saved, but the sync list was not updated:', err);
+                            alert('The record saved, but the dashboard list could not be updated. It will clear on the next sync.');
+                        } finally {
+                            hideBusy();
+                        }
+                    } else {
+                        window.location.reload();
+                    }
                 },
                 error: async function (xhr, status, error) {
+                    hideBusy();
+
+                    // Leave the modal up: the selections are the part that is
+                    // expensive to recreate, and a reload would discard them.
+                    const body = xhr.responseJSON || {};
+                    const detail = [body.error, ...(body.errors || [])]
+                        .filter(Boolean)
+                        .join(String.fromCharCode(10));
+
+                    console.error("Error saving record:", error, xhr.responseText);
+                    alert(`REDCap did not save this record.
+
+${detail || error || 'The server did not report why.'}
+
+Your selections are still on screen.`);
+
                     try {
                         await logModuleEvent("Error occured saving record", {
                             error: error,
@@ -720,8 +770,7 @@ $can_adjudicate = $module->canAdjudicate();
                         });
                         console.log("Log sent successfully.");
                     } catch (err) {
-                        console.error("Log failed, but data was saved:", err);
-                        console.error("Error in checkpoint:", error, xhr.responseText);
+                        console.error("Log failed:", err);
                     }
                 }
             });
@@ -806,6 +855,49 @@ $can_adjudicate = $module->canAdjudicate();
         });
     }
 
+    /* --- Buffer wheel --------------------------------------------------
+       Covers the page while a slow OnCore or database round trip is in flight.
+       Counted rather than a boolean so that if two callers ever overlap, the
+       first one to finish cannot pull the cover out from under the second. */
+    let rocsBusyDepth = 0;
+
+    function rocsSwallowKeys(event) {
+        // The overlay stops the mouse, but a button that already had focus
+        // would still answer to Enter or Space from behind it.
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    function showBusy(message = 'Working...') {
+        rocsBusyDepth++;
+
+        let overlay = document.getElementById('rocs-busy-overlay');
+        if (overlay) {
+            overlay.querySelector('.rocs-busy-message').textContent = message;
+            return;
+        }
+
+        overlay = document.createElement('div');
+        overlay.id = 'rocs-busy-overlay';
+        overlay.className = 'rocs-busy-overlay';
+        overlay.setAttribute('role', 'alert');
+        overlay.setAttribute('aria-busy', 'true');
+        overlay.innerHTML = '<div class="loader"></div><p class="rocs-busy-message"></p>';
+        overlay.querySelector('.rocs-busy-message').textContent = message;
+
+        document.body.appendChild(overlay);
+        document.addEventListener('keydown', rocsSwallowKeys, true);
+    }
+
+    function hideBusy() {
+        rocsBusyDepth = Math.max(0, rocsBusyDepth - 1);
+        if (rocsBusyDepth > 0) return;
+
+        const overlay = document.getElementById('rocs-busy-overlay');
+        if (overlay) overlay.remove();
+        document.removeEventListener('keydown', rocsSwallowKeys, true);
+    }
+
     async function singleRecordSync(id = false, show = true) {
         console.log('singleRecordSync Ran');
         if (!id) {
@@ -813,72 +905,87 @@ $can_adjudicate = $module->canAdjudicate();
             id = urlParams.get('id');
         }
 
+        showBusy('Checking this record against OnCore. This may take a moment.');
+
         $.ajax({
             url: '<?= $module->getUrl("scripts/get_record_by_id.php") ?>',
             data: { 'record_id': id },
             success: async function (data) {
-                let protocolId = null;
-                let record = data[0];
+                // hideBusy() has to run exactly once however this handler
+                // leaves, early returns and thrown errors included - jQuery
+                // does not catch a rejection from an async success callback,
+                // so the cover would otherwise stay up for good.
+                let busy = true;
+                const done = () => { if (busy) { busy = false; hideBusy(); } };
 
-                if ((!record[irb_field] || record[irb_field] === "") && (!record[protocol_field] || record[protocol_field] === "")) {
-                    alert('Please ensure to populate the Protocol Number or IRB Number field and SAVE the record before attempting to synchronize with OnCore.');
-                    return;
-                }
+                try {
+                    let protocolId = null;
+                    let record = data[0];
 
-                let details;
-                if (record[protocol_field] && record[protocol_field] !== "") {
-                    details = await safeFetchOncore('protocolManagementDetails', `&protocolNo=${record[protocol_field]}`);
-                } else {
-                    details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${record[irb_field]}`);
-                }
-
-                if (details.success && details.data) {
-                    protocolId = details.data['protocolId'];
-                    if ((!record[protocol_field] || record[protocol_field] === "") && details.data['protocolNo']) {
-                        let savePayload = {};
-                        savePayload['record_id'] = record.record_id;
-                        savePayload[protocol_field] = details.data['protocolNo'];
-                        $.ajax({
-                            url: "<?= $module->getUrl('scripts/save_record.php'); ?>",
-                            method: "POST",
-                            data: {
-                                pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
-                                redcap_csrf_token: <?= json_encode($csrf) ?>,
-                                record: JSON.stringify([savePayload])
-                            }
-                        });
-                        record[protocol_field] = details.data['protocolNo'];
+                    if ((!record[irb_field] || record[irb_field] === "") && (!record[protocol_field] || record[protocol_field] === "")) {
+                        done();
+                        alert('Please ensure to populate the Protocol Number or IRB Number field and SAVE the record before attempting to synchronize with OnCore.');
+                        return;
                     }
-                } else {
-                    console.warn("Could not find a protocol with that eIRB number.");
-                    return; // Stop execution if no protocol is found
+
+                    let details;
+                    if (record[protocol_field] && record[protocol_field] !== "") {
+                        details = await safeFetchOncore('protocolManagementDetails', `&protocolNo=${record[protocol_field]}`);
+                    } else {
+                        details = await safeFetchOncore('protocolManagementDetails', `&irbNo=${record[irb_field]}`);
+                    }
+
+                    if (details.success && details.data) {
+                        protocolId = details.data['protocolId'];
+                        if ((!record[protocol_field] || record[protocol_field] === "") && details.data['protocolNo']) {
+                            let savePayload = {};
+                            savePayload['record_id'] = record.record_id;
+                            savePayload[protocol_field] = details.data['protocolNo'];
+                            $.ajax({
+                                url: "<?= $module->getUrl('scripts/save_record.php'); ?>",
+                                method: "POST",
+                                data: {
+                                    pid: <?= json_encode($_GET['pid'] ?? $project_id ?? 0) ?>,
+                                    redcap_csrf_token: <?= json_encode($csrf) ?>,
+                                    record: JSON.stringify([savePayload])
+                                }
+                            });
+                            record[protocol_field] = details.data['protocolNo'];
+                        }
+                    } else {
+                        console.warn("Could not find a protocol with that eIRB number.");
+                        return; // Stop execution if no protocol is found
+                    }
+
+                    // Fire all endpoint requests in parallel
+                    const apiEndpoints = buildAPI(protocolId);
+                    const fetchPromises = Object.entries(apiEndpoints).map(async ([protocol, query]) => {
+                        const response = await safeFetchOncore(protocol, query);
+                        return {protocol: protocol, response: response};
+                    });
+
+                    // Wait for all of them to finish
+                    const results = await Promise.all(fetchPromises);
+
+                    console.log('results', results)
+
+                    // Build a dictionary organized by endpoint: { "protocolConsents": {...}, "protocolStaff": {...} }
+                    const oncoreDataByEndpoint = {};
+                    results.forEach(res => {
+                        oncoreDataByEndpoint[res.protocol] = res.response.data;
+                    });
+
+                    const enrichedOncoreData = await enrichRelatedOncoreData(oncoreDataByEndpoint);
+                    console.log('singleRecordSync', enrichedOncoreData);
+
+                    // Run the comparison logic once we have ALL the data
+                    runMappingComparison(record, enrichedOncoreData, show);
+                } finally {
+                    done();
                 }
-
-                // Fire all endpoint requests in parallel
-                const apiEndpoints = buildAPI(protocolId);
-                const fetchPromises = Object.entries(apiEndpoints).map(async ([protocol, query]) => {
-                    const response = await safeFetchOncore(protocol, query);
-                    return {protocol: protocol, response: response};
-                });
-
-                // Wait for all of them to finish
-                const results = await Promise.all(fetchPromises);
-
-                console.log('results', results)
-
-                // Build a dictionary organized by endpoint: { "protocolConsents": {...}, "protocolStaff": {...} }
-                const oncoreDataByEndpoint = {};
-                results.forEach(res => {
-                    oncoreDataByEndpoint[res.protocol] = res.response.data;
-                });
-
-                const enrichedOncoreData = await enrichRelatedOncoreData(oncoreDataByEndpoint);
-                console.log('singleRecordSync', enrichedOncoreData);
-
-                // Run the comparison logic once we have ALL the data
-                runMappingComparison(record, enrichedOncoreData, show);
             },
             error: async function (xhr, status, error) {
+                hideBusy();
                 console.error('Error fetching REDCap record:', error, xhr.responseText);
 
                 await logModuleEvent("Error fetching REDCap record", {
@@ -1100,6 +1207,68 @@ $can_adjudicate = $module->canAdjudicate();
         return oncore_fields;
     }
 
+    /* --- OnCore values into REDCap codes ---------------------------------
+       REDCap stores a categorical answer as its code and refuses anything
+       else, while OnCore answers these fields with a JSON boolean. Saving
+       "false" into a yes/no field is rejected, and because REDCap discards the
+       whole record when any one field is bad, a single such field blocks the
+       entire adjudication.
+
+       The codes are read off the field rather than assumed. A project is free
+       to number its choices however it likes, and they do: pilot_v2 here is
+       "0, Yes|1, No", so mapping true to 1 would quietly record the opposite
+       of what OnCore said. */
+    const CATEGORICAL_FIELD_TYPES = ['yesno', 'truefalse', 'radio', 'dropdown', 'select', 'checkbox'];
+
+    function fieldChoices(fieldInfo) {
+        const type = String(fieldInfo?.field_type || '').toLowerCase();
+
+        // These two carry no choice string; REDCap implies the codes.
+        if (type === 'yesno') return [{ code: '1', label: 'Yes' }, { code: '0', label: 'No' }];
+        if (type === 'truefalse') return [{ code: '1', label: 'True' }, { code: '0', label: 'False' }];
+
+        if (!CATEGORICAL_FIELD_TYPES.includes(type)) return null;
+
+        return String(fieldInfo?.select_choices_or_calculations || '')
+            .split('|')
+            .map(choice => {
+                const parts = choice.split(',');
+                const code = (parts.shift() || '').trim();
+                return { code: code, label: parts.join(',').trim() };
+            })
+            .filter(choice => choice.code !== '');
+    }
+
+    function toFieldCode(fieldInfo, value) {
+        const choices = fieldChoices(fieldInfo);
+        if (!choices || !choices.length) return value;
+        if (value === null || value === undefined || value === '') return value;
+
+        const text = String(value).trim();
+        const lower = text.toLowerCase();
+
+        // Already a code, or spelled out the way the field labels it.
+        if (choices.some(choice => choice.code === text)) return text;
+
+        const byLabel = choices.find(choice => choice.label.toLowerCase() === lower);
+        if (byLabel) return byLabel.code;
+
+        // The boolean case this all exists for.
+        let wanted = null;
+        if (['true', 'yes', 'y'].includes(lower)) wanted = ['yes', 'true'];
+        else if (['false', 'no', 'n'].includes(lower)) wanted = ['no', 'false'];
+
+        if (wanted) {
+            const hit = choices.find(choice => wanted.includes(choice.label.toLowerCase()));
+            if (hit) return hit.code;
+        }
+
+        // Nothing matched. Hand back what OnCore said so that a save reports it
+        // rather than this quietly writing a blank over real data.
+        console.warn('No matching choice for', value, 'on', fieldInfo?.field_name);
+        return value;
+    }
+
     function runMappingComparison(record, oncoreDataByEndpoint, show=false) {
         console.log("Running Mapping Comparison");
         console.log(oncoreDataByEndpoint);
@@ -1126,7 +1295,14 @@ $can_adjudicate = $module->canAdjudicate();
 
                 // The mapping reads the whole list; the individual entries ride
                 // along so the adjudication view can offer them one at a time.
-                const oncoreEntries = oncorePathEntries(dict, oncoreFieldName);
+                // Coded before anything else looks at it, so that the value
+                // compared against REDCap, the value shown, and the value saved
+                // are all the one REDCap will accept. Comparing a raw "false"
+                // against a stored "0" also reported a mismatch on every such
+                // field, whether or not the two sides actually disagreed.
+                const fieldInfo = dictionary?.[form]?.[redcapField];
+                const oncoreEntries = oncorePathEntries(dict, oncoreFieldName)
+                    .map(entry => ({ ...entry, value: toFieldCode(fieldInfo, entry.value) }));
                 const oncoreValue = oncoreEntries.map(entry => entry.value).join('; ');
 
                 const comparison = (oncoreShown, redcapSelected, oncoreSelected, unmapped) => {
@@ -1186,8 +1362,11 @@ $can_adjudicate = $module->canAdjudicate();
     }
 
     // Runs a request to a script saving comparisons to the config
+    // Returns the request so a caller can wait for the list to be stored
+    // before acting on it. Without that, a reload or a row removal can outrun
+    // the write and leave the dashboard disagreeing with the setting.
     function track_adjudicates(adjudicates) {
-        $.ajax({
+        return $.ajax({
             url: '<?= $module->getUrl("scripts/track_adjudicates.php") ?>',
             method: 'POST',
             data: {

@@ -106,8 +106,13 @@ if($module->getProjectSetting('running')):
         }
     }
 
+    // The one outstanding-record list for this page. It used to be read afresh
+    // from the setting inside every function that touched it, which meant each
+    // call started again from the state the page loaded with: ignoring a second
+    // record posted a list that still contained the first, putting it back.
+    let adjudicates = <?= json_encode($module->getProjectSetting('to-adjudicate')); ?> || [];
+
     document.addEventListener('DOMContentLoaded', async () => {
-        const adjudicates = <?= json_encode($module->getProjectSetting('to-adjudicate')); ?>;
         const metadata = <?= json_encode($module->getProjectSetting('adj-metadata')); ?>;
 
         let running = <?= json_encode($module->getProjectSetting('running')); ?>;
@@ -180,11 +185,17 @@ if($module->getProjectSetting('running')):
         }
     });
 
-    function tempIgnore(record_id) {
-        let adjudicates = <?= json_encode($module->getProjectSetting('to-adjudicate')); ?>;
-        adjudicates = adjudicates.filter(record => record.record_id != record_id); // filter should effectively remove the record that was ignored.
-        document.getElementById(record_id).remove();
-        track_adjudicates(adjudicates);
+    // Drops the record from this sync's list only. It is not opted out, so the
+    // next scan picks it up again if it still disagrees with OnCore - which is
+    // what we want after an adjudication: the save is done, and the next sync
+    // is the thing that decides whether it still needs attention.
+    async function tempIgnore(record_id) {
+        adjudicates = adjudicates.filter(record => record.record_id != record_id);
+
+        const row = document.getElementById(record_id);
+        if (row) row.remove();
+
+        await track_adjudicates(adjudicates);
     }
 
     function fullIgnore(record_id) {
