@@ -23,9 +23,7 @@ if (!SUPER_USER && !in_array(USERID, $authorized_users)) {
 // Now you can safely render your page
 require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
 
-$user_rights = \REDCap::getUserRights(USERID);
-// Check if the user has a data_entry string associated with their rights
-$can_adjudicate = (SUPER_USER || !empty($user_rights['data_entry']));
+$can_adjudicate = $module->canAdjudicate();
 
 $raw_dashboard_fields = $module->getProjectSetting('dashboard-fields');
 $title_field = trim((string) ($module->getProjectSetting('title-field') ?: 'full_title'));

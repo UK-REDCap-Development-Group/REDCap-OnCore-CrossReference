@@ -504,6 +504,40 @@ class ROCS extends AbstractExternalModule
         return $_SERVER['REQUEST_URI'];
     }
 
+    /**
+     * Whether the current user may act on a record from ROCS - adjudicate it,
+     * or flag it to be ignored. Both write data, so this asks for edit rights
+     * on at least one instrument.
+     *
+     * REDCap::getUserRights() keys its result by lower-cased username, and it
+     * consumes the raw 'data_entry' string, replacing it with a parsed 'forms'
+     * map of instrument => level. Neither $rights['data_entry'] nor
+     * $rights[USERID]['data_entry'] is ever set, so reading either one denies
+     * every non-superuser.
+     */
+    public function canAdjudicate()
+    {
+        if (SUPER_USER) return true;
+
+        $rights = \REDCap::getUserRights(USERID);
+        $forms = $rights[strtolower(USERID)]['forms'] ?? [];
+
+        // A level is either legacy (1 = view/edit, 3 = edit survey responses)
+        // or, in newer REDCap, a bitmask that a plain comparison misreads -
+        // 128 there means no access at all. Let REDCap read it where it can.
+        $ask_redcap = method_exists('UserRights', 'hasDataViewingRights');
+
+        foreach ($forms as $level) {
+            if ($ask_redcap) {
+                if (\UserRights::hasDataViewingRights($level, 'view-edit')) return true;
+            } elseif ((string) $level === '1' || (string) $level === '3') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     // Checks for which form we are on and includes instructions for mapping data to fiels on that page
     function redcap_every_page_top($project_id)
     {
@@ -637,8 +671,7 @@ class ROCS extends AbstractExternalModule
 
         $is_configured_sync_page = (!empty($sync_pages) && in_array($current_page, $sync_pages));
 
-        $user_rights = \REDCap::getUserRights(USERID);
-        $can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
+        $can_adjudicate = $this->canAdjudicate();
 
         // TODO: go through and implement checks against the above variable to ensure that users without write permissions can't perform adjudications
         if (self::isFieldMappingPage()) {

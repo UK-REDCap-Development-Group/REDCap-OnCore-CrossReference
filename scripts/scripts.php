@@ -11,8 +11,7 @@ $webroot = APP_PATH_WEBROOT . 'redcap_v' . REDCAP_VERSION . '/';
 // Generate the URL for your AJAX logging endpoint
 $logAjaxUrl = $this->getUrl('scripts/log_event.php');
 
-$user_rights = \REDCap::getUserRights(USERID);
-$can_adjudicate = (SUPER_USER || ($user_rights[USERID]['data_entry'] >= 1));
+$can_adjudicate = $module->canAdjudicate();
 ?>
 <link rel="stylesheet" href="<?= $module->getUrl('css/field_mappings.css') ?>">
 <script>
