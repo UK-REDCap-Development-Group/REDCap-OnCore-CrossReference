@@ -371,3 +371,226 @@ table.dataTable tbody tr.highlight td {
     cursor: pointer;
     margin-left: 5px;
 }
+
+/* OnCore field picker: the button standing in for each mapping row's dropdown, and the shared
+   search popover it opens (see attachOncoreFieldPicker in pages/FieldMappings.php). A trimmed
+   version of the ADIF mapping picker - one source, so no source chips or lookup hints. */
+.rocs-picker-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 36px;
+    padding: 4px 10px;
+    border: 1px solid #C9CED6;
+    border-radius: 6px;
+    background: #FFFFFF;
+    color: #1C2128;
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.rocs-picker-trigger:hover {
+    border-color: #8A94A3;
+}
+
+.rocs-picker-trigger:focus-visible {
+    outline: 2px solid #1F5F99;
+    outline-offset: 1px;
+}
+
+.rocs-picker-trigger.is-open {
+    border-color: #1F5F99;
+    box-shadow: 0 0 0 1px #1F5F99;
+}
+
+.rocs-picker-trigger.is-empty {
+    border-style: dashed;
+    color: #5A6270;
+}
+
+/* A saved mapping OnCore didn't return for this protocol - kept, but flagged */
+.rocs-picker-trigger.is-missing {
+    border-color: #C98A1B;
+    background: #FFF8EC;
+}
+
+.rocs-picker-trigger.is-missing .rocs-picker-value {
+    text-decoration: line-through;
+    text-decoration-color: #C98A1B;
+}
+
+.rocs-picker-trigger svg {
+    flex: none;
+}
+
+.rocs-picker-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Labels are plain language; only the raw OnCore path underneath is code */
+.rocs-picker-option-path {
+    font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.rocs-picker-badge {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 45%;
+    padding: 1px 6px;
+    overflow: hidden;
+    border-radius: 4px;
+    background: #EEF0F3;
+    color: #3D4550;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rocs-picker {
+    position: absolute;
+    z-index: 1040;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #C9CED6;
+    border-radius: 8px;
+    background: #FFFFFF;
+    box-shadow: 0 12px 32px rgba(20, 30, 45, 0.18);
+    color: #1C2128;
+    font-size: 13px;
+    text-align: left;
+}
+
+.rocs-picker[hidden] {
+    display: none;
+}
+
+.rocs-picker-search {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    margin: 10px;
+    padding: 0 10px;
+    border: 2px solid #1F5F99;
+    border-radius: 6px;
+    color: #1F5F99;
+    font-weight: normal;
+}
+
+.rocs-picker-search input {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #1C2128;
+    font: inherit;
+    font-size: 14px;
+}
+
+.rocs-picker-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 6px 6px;
+    border-top: 1px solid #E4E7EB;
+}
+
+.rocs-picker-group-label {
+    padding: 10px 6px 4px;
+    color: #5A6270;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.rocs-picker-option {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.rocs-picker-option.is-active {
+    background: #E8F0FA;
+}
+
+.rocs-picker-option-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.rocs-picker-option.is-clear .rocs-picker-option-main {
+    color: #5A6270;
+}
+
+.rocs-picker-option-path {
+    color: #5A6270;
+    font-size: 11px;
+    overflow-wrap: anywhere;
+}
+
+.rocs-picker-option mark {
+    padding: 0;
+    border-radius: 2px;
+    background: #FDE3A7;
+    color: inherit;
+}
+
+.rocs-picker-current {
+    margin-left: auto;
+    color: #1E6B3A;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.rocs-picker-empty {
+    padding: 16px 8px;
+    color: #5A6270;
+}
+
+.rocs-picker-footer {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4px 16px;
+    padding: 8px 10px;
+    border-top: 1px solid #E4E7EB;
+    color: #5A6270;
+    font-size: 12px;
+}
+
+/* A field that reads every entry of a list - several values joined with "; " - and so needs
+   adjudicating whenever it's pulled */
+.rocs-picker-list-tag {
+    flex: none;
+    padding: 1px 6px;
+    border: 1px solid #E3C27A;
+    border-radius: 4px;
+    background: #FFF6E0;
+    color: #7A5200;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}

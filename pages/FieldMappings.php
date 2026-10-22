@@ -97,59 +97,735 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
         return segments;
     }
 
-    // Show the two segments that identify a mapping - which entry of the list,
-    // and which field of it - and drop whatever sits between them. The full path
-    // stays as the option's value and in its tooltip.
-    function oncoreFieldDisplay(path) {
-        const segments = oncorePathSegments(path);
-        if (segments.length < 2) return path;
+    // ---- Plain-language labels ----
+    // A raw path such as [].contact.lastName means nothing to someone opening the module for the
+    // first time. Labels say the same thing in words - "All staff › Last name" - and the raw path
+    // stays as secondary text and in the tooltip. Labels are display only: the saved mapping is
+    // always the raw path.
 
-        return `${segments[0]} · ${segments[segments.length - 1]}`;
+    // What a list response from each endpoint holds, for "All ..." labels
+    const ONCORE_ENDPOINT_NOUNS = {
+        protocols: 'protocols',
+        protocolConsents: 'consents',
+        protocolSponsors: 'sponsors',
+        protocolStaff: 'staff',
+        protocolEprmsSubmissions: 'ePRMS submissions',
+        protocolPrmcReviews: 'PRMC reviews',
+        protocolIde: 'IDE records',
+        protocolInd: 'IND records',
+        protocolIrbReviews: 'IRB reviews',
+        protocolInstitutions: 'institutions',
+    };
+
+    // Words written differently in a label than in a camelCase key
+    const ONCORE_LABEL_WORDS = {
+        id: 'ID', ids: 'IDs', no: 'number', num: 'number', irb: 'IRB', eirb: 'eIRB', nct: 'NCT',
+        ind: 'IND', ide: 'IDE', prmc: 'PRMC', eprms: 'ePRMS', pi: 'PI', fda: 'FDA', nci: 'NCI',
+        dsmb: 'DSMB', ctep: 'CTEP', ctsu: 'CTSU', url: 'URL', mrn: 'MRN', crc: 'CRC', dob: 'DOB',
+    };
+
+    // Objects the module itself nests into a response when it fetches related records (see
+    // enrichRelatedOncoreData). They add nothing to a label: "All staff › Last name" rather
+    // than "All staff › Contact › Last name".
+    const ONCORE_LABEL_WRAPPERS = new Set(['contact', 'sponsor']);
+
+    // principalInvestigator -> "principal investigator", irbNo -> "IRB number"
+    function oncoreLabelWords(key) {
+        return String(key)
+            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+            .split(/[^A-Za-z0-9]+/)
+            .filter(Boolean)
+            .map(word => ONCORE_LABEL_WORDS[word.toLowerCase()] || word.toLowerCase())
+            .join(' ');
     }
+
+    function capitalizeFirst(text) {
+        return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+    }
+
+    function oncoreEndpointNoun(endpoint) {
+        if (ONCORE_ENDPOINT_NOUNS[endpoint]) return ONCORE_ENDPOINT_NOUNS[endpoint];
+        const rest = String(endpoint || '').replace(/^protocol(?=[A-Z])/, '');
+        return oncoreLabelWords(rest) || 'entries';
+    }
+
+    // A field reads every entry of a list - and so arrives as several values joined with "; " -
+    // whenever its path passes through [].
+    function oncoreFieldIsList(path) {
+        return oncorePathSegments(path).includes('[]');
+    }
+
+    // The words for a path. keepWrappers is for the rare case where dropping a wrapper would
+    // give two fields of one endpoint the same label.
+    function oncoreFieldLabel(endpoint, path, keepWrappers = false) {
+        const segments = oncorePathSegments(path);
+        const parts = [];
+        let previousIsKey = false;
+
+        segments.forEach((segment, index) => {
+            if (segment === '[]') {
+                // "All" and whatever the list holds: the key it sits under, or the endpoint's
+                // records when the whole response is the list
+                const noun = previousIsKey ? parts.pop() : oncoreEndpointNoun(endpoint);
+                parts.push(`all ${noun}`);
+                previousIsKey = false;
+                return;
+            }
+
+            if (segment.startsWith('[')) {
+                // Long-hand role filter, [staffRole=Principal Investigator]: just the role
+                const inner = segment.slice(1, -1).replace(/\\(.)/g, '$1');
+                const equals = inner.indexOf('=');
+                parts.push(equals === -1 ? inner : inner.slice(equals + 1));
+                previousIsKey = false;
+                return;
+            }
+
+            const isLast = index === segments.length - 1;
+            const nextIsList = segments[index + 1] === '[]';
+            if (!keepWrappers && !isLast && !nextIsList && ONCORE_LABEL_WRAPPERS.has(segment)) {
+                previousIsKey = false;
+                return;
+            }
+
+            parts.push(oncoreLabelWords(segment));
+            previousIsKey = true;
+        });
+
+        return parts.map(capitalizeFirst).join(' › ') || path;
+    }
+
+    // The label shown for a field: from the index when it's there, since that has settled any
+    // two fields sharing a label
+    function oncoreFieldLabelFor(obj) {
+        const indexed = pickerIndex().byKey.get(pickerKey(obj.endpoint, obj.field));
+        return indexed ? indexed.label : oncoreFieldLabel(obj.endpoint, obj.field);
+    }
+
+    const ONCORE_LIST_NOTE = 'OnCore returns a list here. Every entry is pulled and joined with "; ", '
+        + 'so this field will need someone to adjudicate it each time it is pulled. '
+        + 'To keep one person in sync automatically, map a role instead (e.g. Principal investigator).';
 
     // Build one <option>, shortened for display and carrying the full path in
     // its value, its tooltip and data-protocol (which save/load both read).
     function oncoreFieldOption(obj) {
         const option = document.createElement('option');
         option.value = obj.field;
-        option.textContent = oncoreFieldDisplay(obj.field);
+        option.textContent = oncoreFieldLabelFor(obj);
         option.setAttribute('data-protocol', obj.endpoint);
-
-        // [] takes every value in a list; a role segment such as
-        // principalInvestigator takes only that person's, which is what lets
-        // the field sync without adjudication.
-        const note = obj.field.includes('[]')
-            ? '\n\nReads every value returned in this list, joined with "; ". Choose a single value when adjudicating a record, or map a role instead.'
-            : '';
-        option.title = `${obj.endpoint}: ${obj.field}${note}`;
+        option.title = oncoreFieldTitle(obj);
 
         return option;
     }
 
-    // Append every discovered field, grouped under its endpoint so the endpoint
-    // name appears once as a heading rather than on every line. Grouping does
-    // not affect select.options, which stays flat for selectedIndex lookups.
-    function appendOncoreFieldOptions(selectEl, fields, onOption) {
-        if (!Array.isArray(fields)) return;
+    // [] takes every value in a list; a role segment such as
+    // principalInvestigator takes only that person's, which is what lets
+    // the field sync without adjudication.
+    function oncoreFieldTitle(obj) {
+        const note = oncoreFieldIsList(obj.field) ? `\n\n${ONCORE_LIST_NOTE}` : '';
+        return `${oncoreFieldLabelFor(obj)}\n${obj.endpoint}: ${obj.field}${note}`;
+    }
 
-        // Keyed rather than run-length grouped, so an endpoint appears once even
-        // if the discovered fields ever arrive unsorted.
-        const groups = new Map();
+    // ---- OnCore field picker ----
+    // Each mapping row keeps a hidden <select name> as the record of its choice, since checkpoint(),
+    // Manage Forms and the saved mapping format all read a mapping from one. It only ever holds
+    // "None" and the chosen field. Choosing happens in one shared, searchable popover instead of a
+    // native dropdown that repeats every discovered OnCore path on every row.
+    //
+    // A trimmed-down version of the ADIF mapping picker: OnCore is the only source, so there are no
+    // source filters, table/API badges or lookup hints - just search, suggestions, and the results
+    // grouped under the OnCore endpoint they came from.
 
-        fields.forEach(obj => {
-            let group = groups.get(obj.endpoint);
-            if (!group) {
-                group = document.createElement('optgroup');
-                group.label = obj.endpoint;
-                selectEl.appendChild(group);
-                groups.set(obj.endpoint, group);
+    // The most results drawn at once. Search narrows past this.
+    const PICKER_RESULT_LIMIT = 150;
+
+    // Words that say nothing about which field is meant, in labels or in paths
+    const PICKER_STOP_WORDS = new Set(['the', 'and', 'for', 'with', 'from', 'of', 'in', 'an', 'to', 'is', 'id', 'no']);
+
+    // Static markup only - nothing from OnCore or the dictionary goes through innerHTML
+    const PICKER_ICONS = {
+        search: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>',
+        chevron: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"></path></svg>',
+    };
+
+    function pickerWords(text) {
+        return String(text || '').replace(/<[^>]*>/g, ' ')
+            // protocolStaff -> protocol Staff, so camelCase OnCore names split into words
+            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+            .toLowerCase()
+            .split(/[^a-z0-9]+/)
+            .filter(word => word.length > 1 && !PICKER_STOP_WORDS.has(word));
+    }
+
+    // Identifies a field across endpoints, since two endpoints can offer the same path ("status")
+    function pickerKey(endpoint, field) {
+        return `${endpoint || ''}\u0000${field}`;
+    }
+
+    // Every OnCore field, with what search and suggestions need worked out once. oncore_fields only
+    // arrives after the OnCore requests finish, so this is built the first time a row needs it.
+    const PICKER_NO_FIELDS = [];
+    let pickerIndexCache = null;
+    function pickerIndex() {
+        const source = Array.isArray(oncore_fields) ? oncore_fields : PICKER_NO_FIELDS;
+        if (pickerIndexCache && pickerIndexCache.source === source) return pickerIndexCache;
+
+        const fields = source.map(obj => ({
+            obj,
+            key: pickerKey(obj.endpoint, obj.field),
+            label: oncoreFieldLabel(obj.endpoint, obj.field),
+            isList: oncoreFieldIsList(obj.field),
+            words: new Set(pickerWords(obj.field)),
+        }));
+
+        // Two fields of one endpoint with the same label get the wrapper segments back
+        const seenLabels = new Map();
+        fields.forEach(f => {
+            const labelKey = pickerKey(f.obj.endpoint, f.label);
+            seenLabels.set(labelKey, (seenLabels.get(labelKey) || 0) + 1);
+        });
+        fields.forEach(f => {
+            if (seenLabels.get(pickerKey(f.obj.endpoint, f.label)) > 1) {
+                f.label = oncoreFieldLabel(f.obj.endpoint, f.obj.field, true);
             }
+            f.haystack = `${f.label} ${f.obj.field} ${f.obj.endpoint}`.toLowerCase();
+        });
 
+        // Within each endpoint, single values (including roles) before "All ..." lists, so the
+        // fields that sync without adjudication are the ones met first
+        const endpointOrder = new Map();
+        fields.forEach(f => {
+            if (!endpointOrder.has(f.obj.endpoint)) endpointOrder.set(f.obj.endpoint, endpointOrder.size);
+        });
+        fields.sort((a, b) => endpointOrder.get(a.obj.endpoint) - endpointOrder.get(b.obj.endpoint)
+            || a.isList - b.isList
+            || a.label.localeCompare(b.label));
+
+        // How many fields each word appears in, so a word most paths share counts for little and a
+        // distinctive one (irbNo, lastName) for a lot
+        const wordCounts = new Map();
+        fields.forEach(f => f.words.forEach(word => {
+            wordCounts.set(word, (wordCounts.get(word) || 0) + 1);
+        }));
+
+        pickerIndexCache = {source, fields, wordCounts, byKey: new Map(fields.map(f => [f.key, f]))};
+        return pickerIndexCache;
+    }
+
+    // Words most of a form's fields share - a naming prefix, not a clue to which OnCore field is
+    // meant. Worked out once per form.
+    const pickerFormWords = new Map();
+    function pickerCommonFormWords(formKey) {
+        if (pickerFormWords.has(formKey)) return pickerFormWords.get(formKey);
+
+        const names = Object.keys(dictionary[formKey] || {});
+        const counts = new Map();
+        names.forEach(name => new Set(pickerWords(name)).forEach(word => {
+            counts.set(word, (counts.get(word) || 0) + 1);
+        }));
+        const common = new Set(names.length >= 3
+            ? [...counts].filter(([, count]) => count / names.length >= 0.5).map(([word]) => word)
+            : []);
+
+        pickerFormWords.set(formKey, common);
+        return common;
+    }
+
+    // Up to three fields whose paths share distinctive words with a REDCap field's name and label:
+    // pi_last_name, "PI Last Name" -> principalInvestigator.lastName.
+    // Ties go to the shorter path, which tends to be the main value rather than a detail of it.
+    function pickerSuggestions(redcapField, formKey) {
+        const {fields, wordCounts} = pickerIndex();
+        const info = (dictionary[formKey] || {})[redcapField] || {};
+        const common = pickerCommonFormWords(formKey);
+        const wanted = [...new Set([...pickerWords(redcapField), ...pickerWords(info.field_label)])]
+            .filter(word => !common.has(word));
+        const total = fields.length;
+        if (!wanted.length || !total) return [];
+
+        // Enough that one distinctive shared word counts and a loosely common one doesn't, scaled
+        // down when there are too few fields for any word to be very rare
+        const threshold = Math.min(2, Math.log(total) / 2);
+        // Whole words, or one starting the other: "irb" in a name finds irbNumber
+        const prefixOf = (a, b) => a.length >= 3 && b.startsWith(a);
+        const scored = [];
+        fields.forEach(f => {
+            let score = 0;
+            f.words.forEach(word => {
+                const count = wordCounts.get(word);
+                if (count / total >= 0.5) return;
+                if (wanted.some(w => w === word || prefixOf(w, word) || prefixOf(word, w))) {
+                    score += Math.log(total / count);
+                }
+            });
+            if (score >= threshold) scored.push({f, score});
+        });
+
+        return scored
+            .sort((a, b) => b.score - a.score || a.f.obj.field.length - b.f.obj.field.length)
+            .slice(0, 3)
+            .map(entry => entry.f);
+    }
+
+    // Puts a field (or nothing) into a row's hidden select, the way a choice in the old dropdown did
+    function setPickerValue(select, obj) {
+        select.textContent = '';
+        const none = document.createElement('option');
+        none.value = '';
+        none.textContent = 'None';
+        none.setAttribute('data-protocol', '');
+        select.appendChild(none);
+
+        if (obj) {
             const option = oncoreFieldOption(obj);
-            if (onOption) onOption(option, obj);
-            group.appendChild(option);
+            option.selected = true;
+            select.appendChild(option);
+        } else {
+            none.selected = true;
+        }
+    }
+
+    function selectedPickerKey(select) {
+        const option = select.options[select.selectedIndex];
+        return option && option.value ? pickerKey(option.dataset.protocol, option.value) : '';
+    }
+
+    // The field a row's hidden select holds. A saved mapping OnCore didn't return this time (the
+    // protocol has no such data, or a request failed) is kept as it was rather than dropped to
+    // None, so the next save doesn't quietly erase it.
+    function selectedPickerField(select) {
+        const key = selectedPickerKey(select);
+        if (!key) return null;
+
+        const found = pickerIndex().byKey.get(key);
+        if (found) return found;
+
+        const option = select.options[select.selectedIndex];
+        const obj = {field: option.value, endpoint: option.dataset.protocol || ''};
+        return {obj, key, label: oncoreFieldLabel(obj.endpoint, obj.field),
+            isList: oncoreFieldIsList(obj.field), missing: true};
+    }
+
+    function pickerBadge(endpoint) {
+        const badge = document.createElement('span');
+        badge.className = 'rocs-picker-badge';
+        badge.textContent = endpoint;
+        badge.title = endpoint;
+        return badge;
+    }
+
+    // Marks a field that arrives as several values and so needs adjudicating each time it's pulled
+    function pickerListTag(compact) {
+        const tag = document.createElement('span');
+        tag.className = 'rocs-picker-list-tag';
+        tag.textContent = compact ? 'List' : 'List';
+        tag.title = ONCORE_LIST_NOTE;
+        return tag;
+    }
+
+    // Appends text with each search term wrapped in <mark>, built from text nodes so a path or
+    // endpoint name is never read as markup
+    function appendHighlighted(parent, text, tokens) {
+        const lower = text.toLowerCase();
+        const ranges = [];
+        tokens.forEach(token => {
+            let from = 0;
+            let at;
+            while ((at = lower.indexOf(token, from)) !== -1) {
+                ranges.push([at, at + token.length]);
+                from = at + token.length;
+            }
+        });
+        ranges.sort((a, b) => a[0] - b[0]);
+
+        let position = 0;
+        ranges.forEach(([start, end]) => {
+            if (end <= position) return;
+            start = Math.max(start, position);
+            if (start > position) parent.append(text.slice(position, start));
+            const mark = document.createElement('mark');
+            mark.textContent = text.slice(start, end);
+            parent.appendChild(mark);
+            position = end;
+        });
+        if (position < text.length) parent.append(text.slice(position));
+    }
+
+    // The button that stands in for a row's dropdown: which endpoint, and which field
+    function renderPickerTrigger(trigger, select) {
+        trigger.textContent = '';
+        const field = selectedPickerField(select);
+        trigger.classList.toggle('is-empty', !field);
+        trigger.classList.toggle('is-missing', Boolean(field && field.missing));
+
+        if (!field) {
+            trigger.insertAdjacentHTML('beforeend', PICKER_ICONS.search);
+            const text = document.createElement('span');
+            text.className = 'rocs-picker-value';
+            text.textContent = 'Search OnCore fields…';
+            trigger.appendChild(text);
+            trigger.title = '';
+            trigger.setAttribute('aria-label', `OnCore field for ${select.name}: not mapped`);
+            return;
+        }
+
+        if (field.obj.endpoint) trigger.appendChild(pickerBadge(field.obj.endpoint));
+        const value = document.createElement('span');
+        value.className = 'rocs-picker-value';
+        value.textContent = field.label;
+        trigger.appendChild(value);
+        if (field.isList) trigger.appendChild(pickerListTag(true));
+        trigger.insertAdjacentHTML('beforeend', PICKER_ICONS.chevron);
+
+        trigger.title = field.missing
+            ? `${oncoreFieldTitle(field.obj)}\n\nOnCore didn't return this field for the current protocol. The saved mapping is kept; choose another field or "No mapping" to change it.`
+            : oncoreFieldTitle(field.obj);
+        trigger.setAttribute('aria-label',
+            `OnCore field for ${select.name}: ${field.label}${field.isList ? ' (list, needs adjudication)' : ''}${field.missing ? ' (not returned by OnCore)' : ''}`);
+    }
+
+    // Turns a row's <select name> into the picker. savedMapping is { mapping, protocol } as saved;
+    // protocol (the endpoint) disambiguates common paths, while old mappings without one still load.
+    function attachOncoreFieldPicker(select, formKey, savedMapping) {
+        let saved = null;
+        if (savedMapping && savedMapping.mapping) {
+            const fields = Array.isArray(oncore_fields) ? oncore_fields : [];
+            // The last match, as the old dropdown's selected option was
+            saved = fields.filter(obj => obj.field === savedMapping.mapping
+                    && (!savedMapping.protocol || savedMapping.protocol === obj.endpoint)).pop()
+                || {field: savedMapping.mapping, endpoint: savedMapping.protocol || ''};
+        }
+        setPickerValue(select, saved);
+        select.hidden = true;
+        select.dataset.form = formKey;
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'rocs-picker-trigger';
+        trigger.setAttribute('aria-haspopup', 'listbox');
+        trigger.setAttribute('aria-expanded', 'false');
+        // The row's <label for> now points at the button
+        if (select.id) {
+            trigger.id = select.id;
+            select.id = `${select.id}__value`;
+        }
+        select.after(trigger);
+        renderPickerTrigger(trigger, select);
+
+        trigger.addEventListener('click', () => openOncoreFieldPicker(select, trigger));
+        trigger.addEventListener('keydown', event => {
+            // Arrow down opens it; typing a letter opens it already searching for that letter
+            const typed = event.key.length === 1 && event.key !== ' '
+                && !event.ctrlKey && !event.metaKey && !event.altKey;
+            if (event.key === 'ArrowDown' || typed) {
+                event.preventDefault();
+                openOncoreFieldPicker(select, trigger, typed ? event.key : '');
+            }
         });
     }
+
+    let picker = null;
+
+    function buildPicker() {
+        if (picker) return picker;
+
+        const el = document.createElement('div');
+        el.className = 'rocs-picker';
+        el.setAttribute('role', 'dialog');
+        el.setAttribute('aria-label', 'Choose an OnCore field');
+        el.hidden = true;
+
+        const search = document.createElement('label');
+        search.className = 'rocs-picker-search';
+        search.insertAdjacentHTML('beforeend', PICKER_ICONS.search);
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.setAttribute('role', 'combobox');
+        input.setAttribute('aria-autocomplete', 'list');
+        input.setAttribute('aria-expanded', 'true');
+        input.setAttribute('aria-controls', 'rocs-picker-list');
+        search.appendChild(input);
+
+        const list = document.createElement('div');
+        list.className = 'rocs-picker-list';
+        list.id = 'rocs-picker-list';
+        list.setAttribute('role', 'listbox');
+        list.setAttribute('aria-label', 'OnCore fields');
+
+        const footer = document.createElement('div');
+        footer.className = 'rocs-picker-footer';
+        const keys = document.createElement('span');
+        keys.textContent = '↑ ↓ to move · Enter to choose · Esc to close';
+        const count = document.createElement('span');
+        footer.append(keys, count);
+
+        el.append(search, list, footer);
+        document.body.appendChild(el);
+
+        picker = {el, input, list, count, select: null, trigger: null, suggestions: [], items: [], active: -1};
+
+        input.addEventListener('input', () => renderPicker(false));
+        input.addEventListener('keydown', event => {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                if (!picker.items.length) return;
+                const step = event.key === 'ArrowDown' ? 1 : -1;
+                const next = Math.min(picker.items.length - 1, Math.max(0, picker.active + step));
+                setPickerActive(next, true);
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                choosePickerItem(picker.active);
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                closeOncoreFieldPicker(true);
+            } else if (event.key === 'Tab') {
+                closeOncoreFieldPicker(false);
+            }
+        });
+
+        return picker;
+    }
+
+    function openOncoreFieldPicker(select, trigger, initialQuery = '') {
+        const p = buildPicker();
+        if (p.trigger === trigger) {
+            closeOncoreFieldPicker(true);
+            return;
+        }
+        closeOncoreFieldPicker(false);
+
+        p.select = select;
+        p.trigger = trigger;
+        p.suggestions = pickerSuggestions(select.name, select.dataset.form);
+        p.input.value = initialQuery;
+        p.input.placeholder = `Search ${pickerIndex().fields.length.toLocaleString()} OnCore fields`;
+        p.input.setAttribute('aria-label', `Search OnCore fields for ${select.name}`);
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.classList.add('is-open');
+        p.el.hidden = false;
+
+        renderPicker(true);
+        positionPicker();
+        p.input.focus();
+    }
+
+    function closeOncoreFieldPicker(returnFocus) {
+        const p = picker;
+        if (!p || !p.trigger) return;
+
+        p.el.hidden = true;
+        p.trigger.setAttribute('aria-expanded', 'false');
+        p.trigger.classList.remove('is-open');
+        if (returnFocus && p.trigger.isConnected) p.trigger.focus();
+        p.trigger = null;
+        p.select = null;
+    }
+
+    function renderPicker(onOpen) {
+        const p = picker;
+        const {fields} = pickerIndex();
+        const query = p.input.value.trim().toLowerCase();
+        const tokens = query.split(/\s+/).filter(Boolean);
+        const shown = tokens.length
+            ? fields.filter(f => tokens.every(token => f.haystack.includes(token)))
+            : fields;
+        const shownSet = new Set(shown);
+        const currentKey = selectedPickerKey(p.select);
+
+        p.list.textContent = '';
+        p.items = [];
+
+        const group = (label, count) => {
+            const wrapper = document.createElement('div');
+            wrapper.setAttribute('role', 'group');
+            const heading = document.createElement('div');
+            heading.className = 'rocs-picker-group-label';
+            heading.id = `rocs-picker-group-${p.list.children.length}`;
+            heading.textContent = count === undefined ? label : `${label} · ${count.toLocaleString()}`;
+            wrapper.setAttribute('aria-labelledby', heading.id);
+            wrapper.appendChild(heading);
+            p.list.appendChild(wrapper);
+            return wrapper;
+        };
+
+        const addOption = (field, parent, withBadge) => {
+            const index = p.items.length;
+            const option = document.createElement('div');
+            option.id = `rocs-picker-option-${index}`;
+            option.className = 'rocs-picker-option';
+            option.setAttribute('role', 'option');
+
+            const main = document.createElement('span');
+            main.className = 'rocs-picker-option-main';
+            option.appendChild(main);
+
+            if (!field) {
+                option.classList.add('is-clear');
+                option.setAttribute('aria-selected', 'false');
+                main.textContent = 'No mapping';
+            } else {
+                const isCurrent = field.key === currentKey;
+                option.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
+                option.title = oncoreFieldTitle(field.obj);
+                if (withBadge) main.appendChild(pickerBadge(field.obj.endpoint));
+                const display = document.createElement('span');
+                display.className = 'rocs-picker-option-display';
+                appendHighlighted(display, field.label, tokens);
+                main.appendChild(display);
+                if (field.isList) main.appendChild(pickerListTag(false));
+                if (isCurrent) {
+                    const current = document.createElement('span');
+                    current.className = 'rocs-picker-current';
+                    current.textContent = 'Current';
+                    main.appendChild(current);
+                }
+
+                // The raw path the label stands for, for anyone who knows OnCore's API
+                if (field.label !== field.obj.field) {
+                    const path = document.createElement('span');
+                    path.className = 'rocs-picker-option-path';
+                    appendHighlighted(path, field.obj.field, tokens);
+                    option.appendChild(path);
+                }
+            }
+
+            // mousedown would move focus out of the search box and close the picker
+            option.addEventListener('mousedown', event => event.preventDefault());
+            option.addEventListener('click', () => choosePickerItem(index));
+            option.addEventListener('mousemove', () => {
+                if (p.active !== index) setPickerActive(index, false);
+            });
+
+            p.items.push(field);
+            parent.appendChild(option);
+        };
+
+        if (!tokens.length && currentKey) {
+            addOption(null, p.list, false);
+        }
+
+        const suggested = p.suggestions.filter(f => shownSet.has(f));
+        if (suggested.length) {
+            const suggestedGroup = group(`Suggested for ${p.select.name}`);
+            suggested.forEach(f => addOption(f, suggestedGroup, true));
+        }
+
+        // Everything else grouped under its endpoint, so the endpoint name appears once as a heading
+        const suggestedSet = new Set(suggested);
+        const byEndpoint = new Map();
+        shown.forEach(f => {
+            if (suggestedSet.has(f)) return;
+            if (!byEndpoint.has(f.obj.endpoint)) byEndpoint.set(f.obj.endpoint, []);
+            byEndpoint.get(f.obj.endpoint).push(f);
+        });
+
+        let drawn = suggested.length;
+        for (const [endpoint, endpointFields] of byEndpoint) {
+            if (drawn >= PICKER_RESULT_LIMIT) break;
+            const endpointGroup = group(endpoint, endpointFields.length);
+            for (const f of endpointFields) {
+                if (drawn >= PICKER_RESULT_LIMIT) break;
+                addOption(f, endpointGroup, false);
+                drawn++;
+            }
+        }
+
+        if (!shown.length) {
+            const empty = document.createElement('div');
+            empty.className = 'rocs-picker-empty';
+            empty.textContent = tokens.length
+                ? `No OnCore fields match “${p.input.value.trim()}”.`
+                : 'OnCore returned no fields for this protocol.';
+            p.list.appendChild(empty);
+        }
+
+        if (drawn < shown.length) {
+            p.count.textContent = `Showing ${drawn.toLocaleString()} of ${shown.length.toLocaleString()} — type to narrow`;
+        } else if (tokens.length) {
+            p.count.textContent = `${shown.length.toLocaleString()} of ${fields.length.toLocaleString()} fields`;
+        } else {
+            p.count.textContent = `${fields.length.toLocaleString()} fields`;
+        }
+
+        // Start on the current mapping when opening, else the best suggestion; while typing,
+        // on the first result. "No mapping" is only ever chosen on purpose.
+        const firstField = p.items.findIndex(f => f !== null);
+        let active = firstField;
+        if (onOpen) {
+            const current = p.items.findIndex(f => f && f.key === currentKey);
+            if (current !== -1) active = current;
+        }
+        setPickerActive(active === -1 ? (p.items.length ? 0 : -1) : active, onOpen);
+        if (!onOpen) p.list.scrollTop = 0;
+    }
+
+    function setPickerActive(index, scroll) {
+        const p = picker;
+        p.list.querySelectorAll('.rocs-picker-option.is-active').forEach(el => el.classList.remove('is-active'));
+        p.active = index;
+
+        const option = index >= 0 ? document.getElementById(`rocs-picker-option-${index}`) : null;
+        if (option) {
+            option.classList.add('is-active');
+            p.input.setAttribute('aria-activedescendant', option.id);
+            if (scroll) option.scrollIntoView({block: 'nearest'});
+        } else {
+            p.input.removeAttribute('aria-activedescendant');
+        }
+    }
+
+    function choosePickerItem(index) {
+        const p = picker;
+        if (!p || !p.select || index < 0 || index >= p.items.length) return;
+
+        const field = p.items[index];
+        const select = p.select;
+        const trigger = p.trigger;
+        const before = selectedPickerKey(select);
+
+        setPickerValue(select, field ? field.obj : null);
+        renderPickerTrigger(trigger, select);
+        closeOncoreFieldPicker(true);
+
+        // The page's change handler saves (checkpoint)
+        if (selectedPickerKey(select) !== before) {
+            select.dispatchEvent(new Event('change', {bubbles: true}));
+        }
+    }
+
+    // Under the trigger with right edges lined up, since the OnCore column sits toward the right;
+    // above it when there isn't room below
+    function positionPicker() {
+        const p = picker;
+        if (!p || !p.trigger) return;
+
+        const margin = 8;
+        const rect = p.trigger.getBoundingClientRect();
+        const width = Math.min(Math.max(rect.width, 520), window.innerWidth - margin * 2);
+        let left = Math.min(rect.right - width, window.innerWidth - margin - width);
+        left = Math.max(margin, left);
+
+        const below = window.innerHeight - rect.bottom - margin;
+        const above = rect.top - margin;
+        const openUp = below < 280 && above > below;
+        p.el.style.width = `${width}px`;
+        p.el.style.left = `${left + window.scrollX}px`;
+        p.el.style.maxHeight = `${Math.max(220, Math.min(480, (openUp ? above : below) - 6))}px`;
+        p.el.style.top = openUp
+            ? `${rect.top + window.scrollY - 6 - p.el.offsetHeight}px`
+            : `${rect.bottom + window.scrollY + 6}px`;
+    }
+
+    document.addEventListener('mousedown', event => {
+        if (!picker || !picker.trigger) return;
+        if (picker.el.contains(event.target) || picker.trigger.contains(event.target)) return;
+        closeOncoreFieldPicker(false);
+    });
+    window.addEventListener('resize', positionPicker);
 
     // Function gets called to build the tables which showcase the forms
     function buildTables(keys) {
@@ -414,8 +1090,7 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
                 </td>
             `;
 
-                    const selectEl = row.querySelector('select');
-                    appendOncoreFieldOptions(selectEl, oncore_fields);
+                    attachOncoreFieldPicker(row.querySelector('select'), selectedForm, null);
 
                     tbody.appendChild(row);
                     i++;
@@ -609,17 +1284,7 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
 
                 tbody.appendChild(row);
 
-                // Populate select with oncore_fields
-                const selectEl = row.querySelector('select');
-                const savedMapping = mappedFields[redcapField] || {};
-                appendOncoreFieldOptions(selectEl, oncore_fields, (option, obj) => {
-                    // Endpoint is included to disambiguate common paths,
-                    // while old mappings without an endpoint still load.
-                    if (savedMapping.mapping === obj.field
-                        && (!savedMapping.protocol || savedMapping.protocol === obj.endpoint)) {
-                        option.selected = true;
-                    }
-                });
+                attachOncoreFieldPicker(row.querySelector('select'), instrumentKey, mappedFields[redcapField] || null);
                 const checkbox = row.querySelector('.include-unmapped');
                 if (checkbox) {
                     checkbox.checked = Boolean((mappedFields[redcapField] || {}).include_unmapped);
