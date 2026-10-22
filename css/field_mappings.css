@@ -594,3 +594,23 @@ table.dataTable tbody tr.highlight td {
     font-weight: 600;
     white-space: nowrap;
 }
+
+/* Note beside the picker explaining a "List" entry (see showPickerTip in FieldMappings.php) */
+.rocs-picker-tip {
+    position: absolute;
+    z-index: 1041;
+    padding: 8px 10px;
+    border: 1px solid #E3C27A;
+    border-radius: 6px;
+    background: #FFF6E0;
+    box-shadow: 0 6px 18px rgba(20, 30, 45, 0.16);
+    color: #4A3500;
+    font-size: 12px;
+    line-height: 1.45;
+    text-align: left;
+    pointer-events: none;
+}
+
+.rocs-picker-tip[hidden] {
+    display: none;
+}

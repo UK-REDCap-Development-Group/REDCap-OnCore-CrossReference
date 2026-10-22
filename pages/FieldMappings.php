@@ -420,7 +420,9 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
         const tag = document.createElement('span');
         tag.className = 'rocs-picker-list-tag';
         tag.textContent = compact ? 'List' : 'List';
-        tag.title = ONCORE_LIST_NOTE;
+        // On the row button the native tooltip is all there is. In the picker the whole entry
+        // shows the note instead (see showPickerTip), which is quicker than a native tooltip.
+        if (compact) tag.title = ONCORE_LIST_NOTE;
         return tag;
     }
 
@@ -565,7 +567,14 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
         el.append(search, list, footer);
         document.body.appendChild(el);
 
-        picker = {el, input, list, count, select: null, trigger: null, suggestions: [], items: [], active: -1};
+        picker = {el, input, list, count, select: null, trigger: null, suggestions: [], items: [], active: -1, tipIndex: -1};
+
+        // Off the list, the note goes; while the list scrolls it follows its entry
+        list.addEventListener('mouseleave', hidePickerTip);
+        list.addEventListener('scroll', () => {
+            const option = picker.tipIndex >= 0 ? document.getElementById(`rocs-picker-option-${picker.tipIndex}`) : null;
+            if (option && option.getAttribute('aria-describedby')) positionPickerTip(option);
+        });
 
         input.addEventListener('input', () => renderPicker(false));
         input.addEventListener('keydown', event => {
@@ -574,7 +583,7 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
                 if (!picker.items.length) return;
                 const step = event.key === 'ArrowDown' ? 1 : -1;
                 const next = Math.min(picker.items.length - 1, Math.max(0, picker.active + step));
-                setPickerActive(next, true);
+                setPickerActive(next, true, true);
             } else if (event.key === 'Enter') {
                 event.preventDefault();
                 choosePickerItem(picker.active);
@@ -617,6 +626,7 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
         const p = picker;
         if (!p || !p.trigger) return;
 
+        hidePickerTip();
         p.el.hidden = true;
         p.trigger.setAttribute('aria-expanded', 'false');
         p.trigger.classList.remove('is-open');
@@ -670,7 +680,7 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
             } else {
                 const isCurrent = field.key === currentKey;
                 option.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
-                option.title = oncoreFieldTitle(field.obj);
+                if (!field.isList) option.title = oncoreFieldTitle(field.obj);
                 if (withBadge) main.appendChild(pickerBadge(field.obj.endpoint));
                 const display = document.createElement('span');
                 display.className = 'rocs-picker-option-display';
@@ -697,7 +707,8 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
             option.addEventListener('mousedown', event => event.preventDefault());
             option.addEventListener('click', () => choosePickerItem(index));
             option.addEventListener('mousemove', () => {
-                if (p.active !== index) setPickerActive(index, false);
+                const needsTip = field && field.isList && p.tipIndex !== index;
+                if (p.active !== index || needsTip) setPickerActive(index, false, true);
             });
 
             p.items.push(field);
@@ -763,7 +774,7 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
         if (!onOpen) p.list.scrollTop = 0;
     }
 
-    function setPickerActive(index, scroll) {
+    function setPickerActive(index, scroll, showTip = false) {
         const p = picker;
         p.list.querySelectorAll('.rocs-picker-option.is-active').forEach(el => el.classList.remove('is-active'));
         p.active = index;
@@ -776,6 +787,93 @@ require_once APP_PATH_DOCROOT . 'ProjectGeneral/header.php';
         } else {
             p.input.removeAttribute('aria-activedescendant');
         }
+
+        if (showTip) {
+            showPickerTip(index);
+        } else {
+            hidePickerTip();
+        }
+    }
+
+    // ---- List note tooltip ----
+    // Explains a "List" entry while the pointer is anywhere on it, or while the arrow keys rest on
+    // it. A native title tooltip takes a second or so to appear and only on the small tag, which
+    // made it easy to miss. Sits beside the picker so it covers none of the other entries.
+    const PICKER_TIP_DELAY = 120;
+    let pickerTipTimer = null;
+
+    function pickerTipElement() {
+        let tip = document.getElementById('rocs-picker-tip');
+        if (!tip) {
+            tip = document.createElement('div');
+            tip.id = 'rocs-picker-tip';
+            tip.className = 'rocs-picker-tip';
+            tip.setAttribute('role', 'tooltip');
+            tip.hidden = true;
+            document.body.appendChild(tip);
+        }
+        return tip;
+    }
+
+    function showPickerTip(index) {
+        const p = picker;
+        clearTimeout(pickerTipTimer);
+        const field = index >= 0 ? p.items[index] : null;
+        if (!field || !field.isList) {
+            hidePickerTip();
+            return;
+        }
+
+        p.tipIndex = index;
+        pickerTipTimer = setTimeout(() => {
+            const option = document.getElementById(`rocs-picker-option-${index}`);
+            if (!option || picker.active !== index || !picker.trigger) return;
+
+            const tip = pickerTipElement();
+            tip.textContent = ONCORE_LIST_NOTE;
+            option.setAttribute('aria-describedby', tip.id);
+            tip.hidden = false;
+            positionPickerTip(option);
+        }, PICKER_TIP_DELAY);
+    }
+
+    function hidePickerTip() {
+        clearTimeout(pickerTipTimer);
+        if (picker) picker.tipIndex = -1;
+        const tip = document.getElementById('rocs-picker-tip');
+        if (tip) tip.hidden = true;
+        document.querySelectorAll('.rocs-picker-option[aria-describedby]')
+            .forEach(el => el.removeAttribute('aria-describedby'));
+    }
+
+    // Left of the picker, level with the entry; under the entry when there's no room on the left
+    function positionPickerTip(option) {
+        const tip = pickerTipElement();
+        const margin = 8;
+        const width = 300;
+        const entry = option.getBoundingClientRect();
+        const list = picker.list.getBoundingClientRect();
+        const panel = picker.el.getBoundingClientRect();
+
+        // Scrolled out of the list's view
+        if (entry.bottom < list.top || entry.top > list.bottom) {
+            tip.hidden = true;
+            return;
+        }
+        tip.hidden = false;
+
+        tip.style.width = `${width}px`;
+        let left;
+        let top;
+        if (panel.left - width - margin >= margin) {
+            left = panel.left - width - margin;
+            top = Math.max(margin, Math.min(entry.top, window.innerHeight - tip.offsetHeight - margin));
+        } else {
+            left = Math.max(margin, Math.min(entry.left, window.innerWidth - width - margin));
+            top = entry.bottom + 4;
+        }
+        tip.style.left = `${left + window.scrollX}px`;
+        tip.style.top = `${top + window.scrollY}px`;
     }
 
     function choosePickerItem(index) {
